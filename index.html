@@ -954,7 +954,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
 
   function dashboard() {
     const heading = findHeading('Dashboard');
-    if (!heading || document.getElementById('dashboard-executive-panel')) return;
+    if (!heading) return;
     const signals = readSignalsSync();
     const s = stats(signals);
     const dirs = Object.fromEntries(s.direction);
@@ -963,14 +963,18 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
     const mixed = dirs.Mixed || dirs.mixed || 0;
     const domains = countBy(signals, x => x.aiDomain || x['AI domain']).slice(0,3);
     const stages = countBy(signals, x => splitMulti(x.innovationStages || x['Innovation stage'])).slice(0,3);
+    const signature = JSON.stringify({ total: s.total, latest: s.latest, direction: s.direction.slice(0,6), domains, stages });
+    const existing = document.getElementById('dashboard-executive-panel');
+    if (existing && existing.getAttribute('data-signal-signature') === signature) return;
+    if (existing) existing.remove();
     insertAfter(afterHeader(heading), `
-      <section class="foresight-panel foresight-panel-muted" aria-label="Executive signal summary">
+      <section class="foresight-panel foresight-panel-muted" aria-label="Executive signal summary" data-signal-signature="${esc(signature)}">
         <div class="foresight-kicker">Executive reading</div>
         <h2 class="foresight-title" style="font-size:24px; margin-top:6px;">What the current scan suggests</h2>
         <div class="foresight-grid foresight-grid-4" style="margin-top:16px;">
-          <div class="foresight-card"><div class="foresight-kicker">Signals</div><div class="foresight-stat">100</div><div class="foresight-body">in the current weekly radar</div></div>
+          <div class="foresight-card"><div class="foresight-kicker">Signals</div><div class="foresight-stat">${s.total}</div><div class="foresight-body">in the current weekly radar</div></div>
           <div class="foresight-card"><div class="foresight-kicker">Direction mix</div><div class="foresight-stat" style="font-size:22px;">${pct(mixed, s.total)} mixed</div><div class="foresight-body">${opportunity} opportunity · ${risk} risk</div></div>
-          <div class="foresight-card"><div class="foresight-kicker">Top AI domain</div><div class="foresight-stat" style="font-size:22px;">${esc(s.topDomain[0])}</div><div class="foresight-body">${s.topDomain[1]} signals</div></div>
+          <div class="foresight-card"><div class="foresight-kicker">Top AI domain</div><div class="foresight-stat" style="font-size:22px;">${esc(s.topDomain[0])}</div><div class="foresight-body">${s.topDomain[1]} signal${s.topDomain[1] === 1 ? '' : 's'}</div></div>
           <div class="foresight-card"><div class="foresight-kicker">Last update</div><div class="foresight-stat" style="font-size:22px;">${esc(s.latest)}</div><div class="foresight-body">weekly curated snapshot</div></div>
         </div>
         <div class="foresight-grid foresight-grid-3" style="margin-top:14px;">
