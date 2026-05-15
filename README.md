@@ -41,3 +41,8 @@ The radar is positioned as a weekly updated foresight intelligence tool. Signals
 ## 2026-05-15 JSON import fix
 
 This version fixes a browser-side storage bug that could show `LOCAL_EDITS_KEY is not defined` when importing signals. JSON import now writes to the same local signal store used by the hosted app and the `Download signals.json` control.
+
+
+## Signals list sorting
+
+The Signals tab displays signals from newest to oldest by default, based on the `date` field in `signals.json`.

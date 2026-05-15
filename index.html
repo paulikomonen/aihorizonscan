@@ -49,7 +49,29 @@
     return out;
   }
 
-  const SEEDED_SIGNALS = INITIAL_SIGNALS.map(coerceSignalForApp);
+  function signalDateTime(signal) {
+    const raw = signal && signal.date ? String(signal.date).trim() : '';
+    if (!raw) return 0;
+    const direct = Date.parse(raw);
+    if (!Number.isNaN(direct)) return direct;
+    const match = raw.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+    if (match) {
+      const [, day, month, year] = match;
+      const parsed = Date.parse(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    }
+    return 0;
+  }
+
+  function sortSignalsNewestFirst(signals) {
+    return [...(signals || [])].map(coerceSignalForApp).sort((a, b) => {
+      const dateDiff = signalDateTime(b) - signalDateTime(a);
+      if (dateDiff !== 0) return dateDiff;
+      return String(b.signalId || '').localeCompare(String(a.signalId || ''), undefined, { numeric: true, sensitivity: 'base' });
+    });
+  }
+
+  const SEEDED_SIGNALS = sortSignalsNewestFirst(INITIAL_SIGNALS);
   window.__EMBEDDED_SIGNALS = SEEDED_SIGNALS;
 
   async function loadSignals() {
@@ -67,7 +89,7 @@
           const json = await response.json();
           const onlineSignals = Array.isArray(json) ? json : (json && Array.isArray(json.signals) ? json.signals : []);
           if (onlineSignals.length) {
-            const normalized = onlineSignals.map(coerceSignalForApp);
+            const normalized = sortSignalsNewestFirst(onlineSignals);
             saveSignals(normalized);
             return normalized;
           }
@@ -82,18 +104,18 @@
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed.map(coerceSignalForApp);
+        if (Array.isArray(parsed) && parsed.length > 0) return sortSignalsNewestFirst(parsed);
       }
     } catch (error) {}
 
     // Offline fallback: embedded snapshot, so double-click use still works.
-    const seeded = [...SEEDED_SIGNALS];
+    const seeded = sortSignalsNewestFirst(SEEDED_SIGNALS);
     saveSignals(seeded);
     return seeded;
   }
 
   function saveSignals(signals) {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify((signals || []).map(coerceSignalForApp))); } catch (error) {}
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(sortSignalsNewestFirst(signals || []))); } catch (error) {}
   }
 
   function nextSignalId(signals) {
@@ -201,7 +223,7 @@
     let signals = await loadSignals();
 
     if (method === 'GET' && pathname === '/api/signals') {
-      return jsonResponse({ signals });
+      return jsonResponse({ signals: sortSignalsNewestFirst(signals) });
     }
 
     if (method === 'POST' && pathname === '/api/signals') {
@@ -223,7 +245,7 @@
       });
       saveSignals(signals);
       try { localStorage.setItem(LOCAL_EDITS_KEY, 'true'); } catch (error) {}
-      return jsonResponse({ signals: added }, 201);
+      return jsonResponse({ signals: sortSignalsNewestFirst(added) }, 201);
     }
 
     if (method === 'POST' && pathname === '/api/signals/scan') {
@@ -629,14 +651,40 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
       });
       localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
       localStorage.setItem(LOCAL_EDITS_KEY, 'true');
-      showImportStatus(`Imported ${added.length} signal${added.length === 1 ? '' : 's'}. Reloading the database view…`, false);
-      setTimeout(() => window.location.reload(), 450);
+      try {
+        sessionStorage.setItem('ai-horizon-signal-tracker.importNotice', `Imported ${added.length} signal${added.length === 1 ? '' : 's'}. The database has been refreshed for this browser session.`);
+      } catch (error) {}
+      showImportStatus(`Imported ${added.length} signal${added.length === 1 ? '' : 's'}. Refreshing the app database…`, false);
+      setTimeout(() => {
+        const base = window.location.origin === 'null'
+          ? window.location.href.split('#')[0].split('?')[0]
+          : window.location.origin + window.location.pathname;
+        window.location.href = `${base}?refresh=${Date.now()}`;
+      }, 350);
     } catch (error) {
       showImportStatus(error && error.message ? error.message : 'Import failed. Check that the JSON is valid.', true);
     }
   }
 
+  function showPendingImportNotice() {
+    let message = '';
+    try {
+      message = sessionStorage.getItem('ai-horizon-signal-tracker.importNotice') || '';
+      if (message) sessionStorage.removeItem('ai-horizon-signal-tracker.importNotice');
+    } catch (error) {}
+    if (!message) return;
+    setTimeout(() => {
+      const box = document.createElement('div');
+      box.textContent = message;
+      box.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:99999;max-width:360px;background:#ecfdf5;color:#065f46;border:1px solid rgba(16,185,129,.45);border-radius:12px;padding:12px 14px;font:13px/1.4 Inter,system-ui,sans-serif;box-shadow:0 14px 30px rgba(0,0,0,.16);';
+      document.body.appendChild(box);
+      setTimeout(() => box.remove(), 5200);
+    }, 700);
+  }
+
   document.addEventListener('click', handleStaticJsonImport, true);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', showPendingImportNotice);
+  else showPendingImportNotice();
 })();
 </script>
 
