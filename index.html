@@ -443,8 +443,9 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
     const embeddedBlock = `const SEEDED_SIGNALS = ${safeScriptJson(signals)};\n  window.__EMBEDDED_SIGNALS = SEEDED_SIGNALS;`;
     html = html.replace(/const SEEDED_SIGNALS = [\s\S]*?;\s*window\.__EMBEDDED_SIGNALS = SEEDED_SIGNALS;/, embeddedBlock);
     const newKey = `ai-horizon-signal-tracker.signals.exported.${Date.now()}.${signals.length}`;
-    html = html.replace(/const STORAGE_KEY = '([^']*)';/, `const STORAGE_KEY = '${newKey}';`);
-    html = html.replace(/const CURRENT_STORAGE_KEY = '([^']*)';/, `const CURRENT_STORAGE_KEY = '${newKey}';`);
+    html = html.replace(/const STORAGE_KEY = '([^']*)';/g, `const STORAGE_KEY = '${newKey}';`);
+    html = html.replace(/const LOCAL_EDITS_KEY = STORAGE_KEY \+ '\.localEdits';/g, `const LOCAL_EDITS_KEY = STORAGE_KEY + '.localEdits';`);
+    html = html.replace(/const CURRENT_STORAGE_KEY = '([^']*)';/g, `const CURRENT_STORAGE_KEY = '${newKey}';`);
     return html;
   }
 
@@ -533,7 +534,8 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
 
 <script>
 (function () {
-  const STORAGE_KEY = 'ai-horizon-signal-tracker.signals.embedded.v5.expert_copy_json_only';
+  const STORAGE_KEY = 'ai-horizon-signal-tracker.signals.dynamic_json.v1';
+  const LOCAL_EDITS_KEY = STORAGE_KEY + '.localEdits';
 
   function parseSignalsJson(raw) {
     const parsed = JSON.parse(raw);
@@ -685,8 +687,8 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
 
 <script id="foresight-product-enhancements">
 (function () {
-  const STORAGE_KEY = 'ai-horizon-signals-v5-github-json';
-  const LOCAL_EDITS_KEY = 'ai-horizon-signals-v5-github-json-edited';
+  const STORAGE_KEY = 'ai-horizon-signal-tracker.signals.dynamic_json.v1';
+  const LOCAL_EDITS_KEY = STORAGE_KEY + '.localEdits';
   const ENHANCED = 'data-foresight-enhanced';
 
   const css = `
@@ -1011,6 +1013,11 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
     const heading = findHeading('Info');
     if (!heading || document.getElementById('info-method-panel')) return;
     insertAfter(afterHeader(heading), `
+      <section class="foresight-panel foresight-panel-muted" aria-label="Method statement">
+        <div class="foresight-kicker">Credibility logic</div>
+        <h2 class="foresight-title" style="font-size:24px; margin-top:6px;">A curated foresight intelligence product</h2>
+        <p class="foresight-body" style="margin-top:8px; max-width:900px;">The radar is designed for innovation and foresight users who need a structured view of change rather than a noisy news feed. The database combines manual scanning, AI-augmented detection, quantitative patterning, expert evaluation and human editorial judgement.</p>
+      </section>
       <section class="foresight-panel" aria-label="How to use the radar" style="margin-top:14px;">
         <div class="foresight-kicker">How to use the radar</div>
         <h2 class="foresight-title" style="font-size:24px; margin-top:6px;">From signals to innovation moves</h2>

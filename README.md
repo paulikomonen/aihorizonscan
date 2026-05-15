@@ -36,3 +36,8 @@ The radar is positioned as a weekly updated foresight intelligence tool. Signals
 - No Python or backend server is required.
 - The app can also be opened locally, using the embedded fallback signal snapshot.
 - Imported signals are stored in the current browser until `signals.json` is downloaded and committed to the repository.
+
+
+## 2026-05-15 JSON import fix
+
+This version fixes a browser-side storage bug that could show `LOCAL_EDITS_KEY is not defined` when importing signals. JSON import now writes to the same local signal store used by the hosted app and the `Download signals.json` control.
