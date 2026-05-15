@@ -53,3 +53,10 @@ The Signals tab displays signals from newest to oldest by default, based on the 
 The hosted app checks `signals.json` on load. If the published `signals.json` changes in the GitHub repository, the app treats the repo file as authoritative and clears stale browser-local edits. If you have local edits in the Update Tracker and want to discard them manually, use **Reload from repo** on the Update Tracker page.
 
 After importing a JSON batch, the app reloads and uses the browser-local working copy immediately across Dashboard, Signal radar, Signals and Innovation implications. Use **Download signals.json** to publish that working copy back to the GitHub repository.
+
+
+## Data-loading fix in this version
+
+The app now queries the static `/api/signals` compatibility layer instead of permanently using the embedded initial data. This means uploaded `signals.json` updates and JSON imports in the Update Tracker are reflected across Dashboard, Signal Radar, Signals and Innovation implications.
+
+The embedded 100-signal database remains as an offline fallback for double-click/local use.
