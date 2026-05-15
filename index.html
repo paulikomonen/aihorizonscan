@@ -820,6 +820,24 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
     .foresight-preview { white-space:pre-wrap; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size:12px; line-height:1.45; border:1px solid var(--foresight-border); border-radius:14px; padding:12px; background:rgba(24,0,97,.035); color:rgba(24,0,97,.78); max-height:220px; overflow:auto; }
     .foresight-button { border:0; border-radius:999px; padding:10px 14px; background:var(--foresight-ink); color:white; font-size:13px; font-weight:700; cursor:pointer; box-shadow:0 8px 22px rgba(24,0,97,.15); }
     .foresight-button.secondary { background:white; color:var(--foresight-ink); border:1px solid var(--foresight-border); box-shadow:none; }
+    .dark .foresight-panel { border-color:hsl(var(--card-border) / 1); background:linear-gradient(180deg, hsl(var(--card) / .96), hsl(var(--card) / .90)); box-shadow:0 12px 36px rgba(0,0,0,.28); }
+    .dark .foresight-panel-muted { background:linear-gradient(135deg, hsl(var(--secondary) / .72), hsl(var(--card) / .92)); }
+    .dark .foresight-kicker { color:hsl(var(--muted-foreground) / 1); opacity:1; }
+    .dark .foresight-title { color:hsl(var(--foreground) / 1); }
+    .dark .foresight-body { color:hsl(var(--muted-foreground) / 1); }
+    .dark .foresight-card { border-color:hsl(var(--card-border) / 1); background:hsl(var(--card) / .86); }
+    .dark .foresight-stat { color:hsl(var(--foreground) / 1); }
+    .dark .foresight-chip { border-color:hsl(var(--border) / 1); background:hsl(var(--secondary) / .76); color:hsl(var(--foreground) / .90); }
+    .dark .foresight-list li { color:hsl(var(--muted-foreground) / 1); }
+    .dark .foresight-list li:before { color:hsl(var(--accent) / 1); }
+    .dark .foresight-step:before { background:hsl(var(--accent) / 1); color:hsl(var(--accent-foreground) / 1); }
+    .dark .foresight-preview { border-color:hsl(var(--border) / 1); background:hsl(var(--muted) / .82); color:hsl(var(--foreground) / .92); }
+    .dark .foresight-button { background:hsl(var(--primary) / 1); color:hsl(var(--primary-foreground) / 1); box-shadow:0 8px 22px rgba(0,0,0,.28); }
+    .dark .foresight-button.secondary { background:hsl(var(--secondary) / 1); color:hsl(var(--secondary-foreground) / 1); border-color:hsl(var(--border) / 1); }
+    .dark .foresight-dot { box-shadow:0 0 0 3px hsl(var(--accent) / .18); }
+    .dark .foresight-radar-visual { background:radial-gradient(circle at center, hsl(var(--accent) / .20) 0 7%, transparent 7% 100%), repeating-radial-gradient(circle at center, transparent 0 44px, hsl(var(--foreground) / .18) 45px 46px), conic-gradient(from -18deg, hsl(var(--accent) / .18), hsl(var(--foreground) / .06), hsl(var(--accent) / .10), hsl(var(--foreground) / .05), hsl(var(--accent) / .18)); border-color:hsl(var(--border) / 1); box-shadow:0 28px 60px rgba(0,0,0,.35); }
+    .dark .foresight-radar-visual:before, .dark .foresight-radar-visual:after, .dark .foresight-radar-axis { opacity:.8; }
+    .dark .foresight-radar-point { border-color:hsl(var(--card) / 1); box-shadow:0 5px 18px rgba(0,0,0,.34); }
     main .foresight-panel + .foresight-panel { margin-top:14px; }
     @media (max-width: 900px) { .foresight-grid-3, .foresight-grid-4, .foresight-landing-showcase { grid-template-columns:1fr; } .foresight-stat { font-size:24px; } .foresight-radar-visual { justify-self:center; max-width:320px; } .foresight-landing-copy .foresight-title { font-size:25px; } }
   `;
