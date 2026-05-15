@@ -1,34 +1,38 @@
-# AI Horizon Signal Tracker — GitHub Pages version
+# AI Horizon Signal Tracker — GitHub-ready dynamic JSON version
 
-This version is designed for online hosting as a static GitHub Pages site.
+This package contains a static AI signal radar that can be hosted on GitHub Pages or another static host.
 
 ## Files
 
-- `index.html` — the website/app.
-- `signals.json` — the signal database read by the hosted app.
+- `index.html` — the application
+- `signals.json` — the signal database read by the hosted app
 
-## How to publish on GitHub Pages
+## Hosting on GitHub Pages
 
-1. Copy `index.html` and `signals.json` to the root of your GitHub repository.
-2. In GitHub, enable Pages for the repository.
-3. Open the GitHub Pages URL.
+1. Upload `index.html` and `signals.json` to the repository root.
+2. Enable GitHub Pages for the repository.
+3. Open the published Pages URL.
 
-## How to update the online signal database
+## Updating the signal database
 
-The hosted app reads `signals.json` from the same folder as `index.html`.
+The app is designed for a simple curated update workflow:
 
-To update the online database:
+1. Open the hosted app.
+2. Go to **Update tracker**.
+3. Paste a JSON array, or an object with a `signals` array.
+4. Use **Validate JSON batch** to preview count, missing titles and likely duplicates.
+5. Import the JSON.
+6. Click **Download signals.json**.
+7. Replace the repository's `signals.json` with the downloaded file and commit the change.
 
-1. Go to **Update Tracker** in the app.
-2. Import a JSON batch.
-3. Click **Download signals.json**.
-4. Replace the repository's existing `signals.json` with the downloaded file.
-5. Commit/push the change.
+The website will read the updated `signals.json` after GitHub Pages redeploys.
 
-After GitHub Pages redeploys, the public website will show the updated database.
+## Editorial positioning
+
+The radar is positioned as a weekly updated foresight intelligence tool. Signals are hand-picked through hybrid scanning: AI-augmented signal detection, qualitative interpretation, structured source monitoring, quantitative patterning, foresight expert evaluation and manual curation.
 
 ## Notes
 
-- The app also contains an embedded fallback database, so the HTML can still open locally.
-- Browser-local edits are stored in localStorage for the current browser.
-- The floating export/download controls are shown only on the **Update Tracker** page.
+- No Python or backend server is required.
+- The app can also be opened locally, using the embedded fallback signal snapshot.
+- Imported signals are stored in the current browser until `signals.json` is downloaded and committed to the repository.
