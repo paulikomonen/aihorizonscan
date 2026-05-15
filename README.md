@@ -1,12 +1,34 @@
-# AI Horizon Signal Tracker — hybrid-scanned, expert-curated static demo
+# AI Horizon Signal Tracker — GitHub Pages version
 
-Open `ai-horizon-signal-tracker-product-ready-copy.html` by double-clicking it.
+This version is designed for online hosting as a static GitHub Pages site.
 
-This version emphasises that the signal radar is hand-picked and weekly updated by foresight experts using both manual and AI-augmented scanning techniques. It is a curated weekly snapshot, not a live feed.
+## Files
 
-Update Tracker has been simplified: LLM-linked URL drafting and broad scan functions are hidden/removed from the demo interface. JSON import remains available for adding prepared signal batches.
+- `index.html` — the website/app.
+- `signals.json` — the signal database read by the hosted app.
 
-After importing JSON, click **Export updated HTML** to download a new standalone HTML file where the current signal database is embedded permanently.
+## How to publish on GitHub Pages
 
+1. Copy `index.html` and `signals.json` to the root of your GitHub repository.
+2. In GitHub, enable Pages for the repository.
+3. Open the GitHub Pages URL.
 
-Update in this version: landing-page ingress and hero line refined; landing radar visual enlarged.
+## How to update the online signal database
+
+The hosted app reads `signals.json` from the same folder as `index.html`.
+
+To update the online database:
+
+1. Go to **Update Tracker** in the app.
+2. Import a JSON batch.
+3. Click **Download signals.json**.
+4. Replace the repository's existing `signals.json` with the downloaded file.
+5. Commit/push the change.
+
+After GitHub Pages redeploys, the public website will show the updated database.
+
+## Notes
+
+- The app also contains an embedded fallback database, so the HTML can still open locally.
+- Browser-local edits are stored in localStorage for the current browser.
+- The floating export/download controls are shown only on the **Update Tracker** page.
