@@ -46,3 +46,10 @@ This version fixes a browser-side storage bug that could show `LOCAL_EDITS_KEY i
 ## Signals list sorting
 
 The Signals tab displays signals from newest to oldest by default, based on the `date` field in `signals.json`.
+
+
+## Data refresh behaviour
+
+The hosted app checks `signals.json` on load. If the published `signals.json` changes in the GitHub repository, the app treats the repo file as authoritative and clears stale browser-local edits. If you have local edits in the Update Tracker and want to discard them manually, use **Reload from repo** on the Update Tracker page.
+
+After importing a JSON batch, the app reloads and uses the browser-local working copy immediately across Dashboard, Signal radar, Signals and Innovation implications. Use **Download signals.json** to publish that working copy back to the GitHub repository.
