@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="AI Horizon Radar logo mark">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="60%">
+      <stop offset="0%" stop-color="#1b0a72"/>
+      <stop offset="100%" stop-color="#0D004C"/>
+    </radialGradient>
+    <linearGradient id="beam" x1="40" y1="210" x2="210" y2="40">
+      <stop offset="0%" stop-color="#FFC800" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#FFC800" stop-opacity="0.75"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#bg)"/>
+  <circle cx="128" cy="128" r="86" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="8"/>
+  <circle cx="128" cy="128" r="54" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="5"/>
+  <circle cx="128" cy="128" r="23" fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="4"/>
+  <path d="M45 151 Q128 96 211 151" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="6" stroke-linecap="round"/>
+  <path d="M128 128 L209 50 A92 92 0 0 1 221 120 Z" fill="url(#beam)" opacity="0.75"/>
+  <line x1="128" y1="128" x2="208" y2="51" stroke="#FFC800" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="128" cy="128" r="7" fill="#FFFFFF" opacity="0.92"/>
+  <circle cx="203" cy="56" r="13" fill="#FFC800"/>
+  <circle cx="86" cy="78" r="7" fill="#43D7D6" opacity="0.9"/>
+  <circle cx="178" cy="165" r="8" fill="#FFFFFF" opacity="0.78"/>
+  <circle cx="72" cy="167" r="6" fill="#FFFFFF" opacity="0.55"/>
+</svg>

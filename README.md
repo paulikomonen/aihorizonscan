@@ -1,4 +1,4 @@
-# AI Horizon Signal Tracker — GitHub-ready dynamic JSON version
+# AI Horizon Radar — GitHub-ready dynamic JSON version
 
 This package contains a static AI signal radar that can be hosted on GitHub Pages or another static host.
 
@@ -83,3 +83,16 @@ Recommended precautions:
 - Treat the in-app password as an editing friction layer, not as real authentication.
 - For stronger access control, host the app behind an authenticated service or organisational access gateway.
 - Review imported JSON before committing it to the repository, especially source URLs and free-text notes.
+
+
+## Brand assets
+
+This package includes a lightweight logo system for AI Horizon Radar:
+
+- `logo-mark.svg` — scalable radar logo mark
+- `logo-lockup.svg` — logo mark with name and project attribution
+- `favicon.ico`, `favicon-32x32.png`, `favicon-16x16.png` — browser tab icons
+- `apple-touch-icon.png` — mobile home-screen icon
+- `og-image.png` — social/link preview image
+
+The favicon and preview image are referenced from `index.html`.
