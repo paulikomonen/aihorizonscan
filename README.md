@@ -60,3 +60,26 @@ After importing a JSON batch, the app reloads and uses the browser-local working
 The app now queries the static `/api/signals` compatibility layer instead of permanently using the embedded initial data. This means uploaded `signals.json` updates and JSON imports in the Update Tracker are reflected across Dashboard, Signal Radar, Signals and Innovation implications.
 
 The embedded 100-signal database remains as an offline fallback for double-click/local use.
+
+## Editing access
+
+The **Update tracker** tab and the **Delete signal** function are protected with the project password:
+
+```text
+aiscan
+```
+
+This is a lightweight client-side gate intended to prevent accidental edits in a limited project demo. It is not strong security, because static websites expose their HTML and JavaScript to visitors.
+
+## Sharing and security notes
+
+For a limited project audience, avoid adding confidential or sensitive material to `signals.json`. Anyone who can access the published site can technically access the signal database file directly.
+
+Recommended precautions:
+
+- Keep the GitHub repository private if the signal data is not meant to be public.
+- Share the GitHub Pages link only with the intended project audience.
+- Do not include personal data, confidential client information, unpublished research material, or restricted source notes in the signal descriptions.
+- Treat the in-app password as an editing friction layer, not as real authentication.
+- For stronger access control, host the app behind an authenticated service or organisational access gateway.
+- Review imported JSON before committing it to the repository, especially source URLs and free-text notes.
