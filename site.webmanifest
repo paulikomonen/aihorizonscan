@@ -1,0 +1,42 @@
+{
+  "name": "AI Horizon Radar",
+  "short_name": "AI Horizon Radar",
+  "description": "Expert-curated, hybrid-scanned signals for innovation management.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#180061",
+  "theme_color": "#180061",
+  "icons": [
+    {
+      "src": "./assets/brand/ai-horizon-radar-logo-32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/brand/ai-horizon-radar-logo-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/brand/ai-horizon-radar-logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/brand/ai-horizon-radar-logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/brand/ai-horizon-radar-logo.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

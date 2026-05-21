@@ -83,3 +83,29 @@ Recommended precautions:
 - Treat the in-app password as an editing friction layer, not as real authentication.
 - For stronger access control, host the app behind an authenticated service or organisational access gateway.
 - Review imported JSON before committing it to the repository, especially source URLs and free-text notes.
+## Brand preview assets
+
+This version includes the high-resolution AI Horizon Radar visual logo for favicons, thumbnails and shared-link previews.
+
+- `assets/brand/ai-horizon-radar-logo.png` — square logo / thumbnail / app icon / Open Graph image, 1254 × 1254 px.
+- `site.webmanifest` — points to the same square PNG as the application icon.
+
+The PNG file is copied into the package unchanged. It was not resized, compressed, cropped or re-exported. The HTML metadata points to this file directly; browsers and social platforms may scale the display preview, but the source file in the package remains full-resolution.
+
+For production, some social platforms prefer absolute Open Graph image URLs. After publishing to GitHub Pages or a custom domain, the relative `og:image` and `twitter:image` paths can be changed to absolute URLs if link previews do not refresh correctly.
+
+## Brand logo assets
+
+The original sharp logo file is preserved unchanged at:
+
+- `assets/brand/ai-horizon-radar-logo.png` (1254 × 1254 px)
+
+Smaller PNG derivatives are included for faster loading in favicons, mobile app icons, web app manifests and shared-link previews:
+
+- `assets/brand/ai-horizon-radar-logo-32.png`
+- `assets/brand/ai-horizon-radar-logo-180.png`
+- `assets/brand/ai-horizon-radar-logo-192.png`
+- `assets/brand/ai-horizon-radar-logo-512.png`
+- `assets/brand/ai-horizon-radar-logo-1200.png`
+
+These resized versions are direct derivatives of the same logo image. The visual logo design has not been changed.
