@@ -821,6 +821,9 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
     .foresight-grid-3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
     .foresight-grid-4 { grid-template-columns:repeat(4,minmax(0,1fr)); }
     .foresight-card { border:1px solid var(--foresight-border); border-radius:16px; padding:15px; background:rgba(255,255,255,.82); }
+    .foresight-synthesis-card { position:relative; border-radius:18px; padding:20px 22px 20px 24px; background:linear-gradient(135deg, rgba(255,255,255,.92), rgba(255,212,0,.085)); border:1px solid var(--foresight-border); overflow:hidden; }
+    .foresight-synthesis-card:before { content:''; position:absolute; left:0; top:18px; bottom:18px; width:4px; border-radius:999px; background:var(--foresight-accent); }
+    .foresight-synthesis-text { margin-top:10px; max-width:1040px; color:rgba(24,0,97,.78); font-size:15px; line-height:1.66; }
     .foresight-stat { font-size:28px; line-height:1; font-weight:760; color:var(--foresight-ink); letter-spacing:-.03em; }
     .foresight-chip { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--foresight-border); border-radius:999px; padding:6px 9px; background:white; color:rgba(24,0,97,.78); font-size:12px; font-weight:600; }
     .foresight-dot { width:8px; height:8px; border-radius:999px; display:inline-block; background:var(--foresight-accent); box-shadow:0 0 0 3px rgba(255,212,0,.22); }
@@ -850,6 +853,8 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
     .dark .foresight-title { color:hsl(var(--foreground) / 1); }
     .dark .foresight-body { color:hsl(var(--muted-foreground) / 1); }
     .dark .foresight-card { border-color:hsl(var(--card-border) / 1); background:hsl(var(--card) / .86); }
+    .dark .foresight-synthesis-card { border-color:hsl(var(--card-border) / 1); background:linear-gradient(135deg, hsl(var(--card) / .94), hsl(var(--secondary) / .70)); }
+    .dark .foresight-synthesis-text { color:hsl(var(--muted-foreground) / 1); }
     .dark .foresight-stat { color:hsl(var(--foreground) / 1); }
     .dark .foresight-chip { border-color:hsl(var(--border) / 1); background:hsl(var(--secondary) / .76); color:hsl(var(--foreground) / .90); }
     .dark .foresight-list li { color:hsl(var(--muted-foreground) / 1); }
@@ -1018,6 +1023,11 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
           <div class="foresight-card"><div class="foresight-kicker">Direction mix</div><div class="foresight-stat" style="font-size:22px;">${pct(mixed, s.total)} mixed</div><div class="foresight-body">${opportunity} opportunity · ${risk} risk</div></div>
           <div class="foresight-card"><div class="foresight-kicker">Top AI domain</div><div class="foresight-stat" style="font-size:22px;">${esc(s.topDomain[0])}</div><div class="foresight-body">${s.topDomain[1]} signal${s.topDomain[1] === 1 ? '' : 's'}</div></div>
           <div class="foresight-card"><div class="foresight-kicker">Last update</div><div class="foresight-stat" style="font-size:22px;">${esc(s.latest)}</div><div class="foresight-body">weekly curated snapshot</div></div>
+        </div>
+        <div class="foresight-synthesis-card" style="margin-top:16px;" aria-label="Qualitative signal synthesis">
+          <div class="foresight-kicker">Qualitative synthesis</div>
+          <h3 class="foresight-title" style="font-size:21px; margin-top:7px;">System-level implications across the signal landscape</h3>
+          <p class="foresight-synthesis-text">Across the 102 signals, AI is shifting from a tool-centric productivity story to a system-level innovation management challenge: value increasingly depends on redesigned workflows, AI-ready data, assurance gates, regulatory and procurement evidence, and the ability to govern agents, open models and multimodal systems across the full innovation process. The landscape is broadly distributed across PESTEC categories, showing that technological progress is tightly coupled with political compliance and sovereignty, economic compute concentration and operating-model redesign, environmental energy and water constraints, social skills and trust dynamics, and cultural questions of authenticity, disclosure and IP. With Act, Prepare and Watch signals almost evenly spread, innovation teams need a dual posture: act now on governance, workflow redesign, cyber/content risks and infrastructure constraints; prepare capabilities for evaluation, data quality, skills, licensing and responsible scaling; and watch further-horizon discontinuities and wild cards such as deceptive agents and embodied-AI standardisation.</p>
         </div>
         <div class="foresight-grid foresight-grid-3" style="margin-top:14px;">
           <div class="foresight-card"><strong>Domains to inspect</strong><ul class="foresight-list">${domains.map(([k,v])=>`<li>${esc(k)} <span style="opacity:.7;">(${v})</span></li>`).join('')}</ul></div>
@@ -1189,6 +1199,361 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
   new MutationObserver(function () { scheduleEnhance(); }).observe(document.documentElement, { childList: true, subtree: true });
 })();
 </script>
+
+<script id="signal-radar-mvp-assessments">
+(function () {
+  const SIGNALS_KEY = 'ai-horizon-signal-tracker.signals.dynamic_json.v1';
+  const ASSESSMENTS_KEY = 'ai-horizon-radar.signal_assessments.v1';
+  const LAST_SELECTED_KEY = 'ai-horizon-radar.signal_assessments.last_selected.v1';
+  const LEVELS = ['Low', 'Medium', 'High'];
+  const RESPONSES = ['Watch', 'Prepare', 'Act'];
+
+  function text(value) {
+    return String(value == null ? '' : value).trim();
+  }
+
+  function esc(value) {
+    return text(value).replace(/[&<>"']/g, function (char) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
+    });
+  }
+
+  function nowStamp() {
+    try { return new Date().toISOString(); } catch (error) { return ''; }
+  }
+
+  function readSignals() {
+    try {
+      const stored = localStorage.getItem(SIGNALS_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length) return parsed;
+        if (parsed && Array.isArray(parsed.signals) && parsed.signals.length) return parsed.signals;
+      }
+    } catch (error) {}
+    if (Array.isArray(window.__EMBEDDED_SIGNALS)) return window.__EMBEDDED_SIGNALS;
+    return [];
+  }
+
+  function readAssessments() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(ASSESSMENTS_KEY) || '{}');
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function writeAssessments(assessments) {
+    try { localStorage.setItem(ASSESSMENTS_KEY, JSON.stringify(assessments || {})); } catch (error) {}
+  }
+
+  function signalId(signal) {
+    return text(signal.signalId || signal.signalID || signal.id || signal['Signal ID'] || signal['SignalID']);
+  }
+
+  function findSignal(id) {
+    const wanted = text(id);
+    return readSignals().find(function (signal) { return signalId(signal) === wanted; }) || null;
+  }
+
+  function getField(signal, keys, fallback) {
+    for (const key of keys) {
+      if (signal && Object.prototype.hasOwnProperty.call(signal, key) && text(signal[key])) return text(signal[key]);
+    }
+    return fallback || '';
+  }
+
+  function getSelectedId() {
+    try { return localStorage.getItem(LAST_SELECTED_KEY) || ''; } catch (error) { return ''; }
+  }
+
+  function setSelectedId(id) {
+    try { localStorage.setItem(LAST_SELECTED_KEY, text(id)); } catch (error) {}
+  }
+
+  function upsertAssessment(id, updates) {
+    const assessments = readAssessments();
+    const current = assessments[id] || {};
+    assessments[id] = Object.assign({}, current, updates, { signalId: id, updatedAt: nowStamp() });
+    writeAssessments(assessments);
+    return assessments[id];
+  }
+
+  function removeEmptyAssessment(id) {
+    const assessments = readAssessments();
+    const item = assessments[id];
+    if (!item) return;
+    if (!item.impact && !item.uncertainty && !item.response && !item.note && !item.important) {
+      delete assessments[id];
+      writeAssessments(assessments);
+    }
+  }
+
+  function isRadarPage() {
+    return (window.location.hash || '').includes('/radar') || !!document.querySelector('[data-testid="signal-radar"]');
+  }
+
+  function ensureStyles() {
+    if (document.getElementById('signal-radar-mvp-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'signal-radar-mvp-styles';
+    style.textContent = `
+      .sr-mvp-panel { width:100%; box-sizing:border-box; margin-top:24px; margin-bottom:24px; }
+      .space-y-6 > .sr-mvp-panel { margin-top:0; margin-bottom:0; }
+      .sr-mvp-grid { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(260px,.8fr); gap:14px; margin-top:14px; }
+      .sr-mvp-section { border:1px solid var(--foresight-border, rgba(24,0,97,.14)); border-radius:16px; padding:14px; background:rgba(255,255,255,.78); }
+      .sr-mvp-controls { display:grid; gap:12px; margin-top:12px; }
+      .sr-mvp-row { display:grid; gap:7px; }
+      .sr-mvp-label { font-size:11px; font-weight:750; color:rgba(24,0,97,.68); text-transform:uppercase; letter-spacing:.12em; }
+      .sr-mvp-pill-row { display:flex; flex-wrap:wrap; gap:7px; }
+      .sr-mvp-pill { border:1px solid var(--foresight-border, rgba(24,0,97,.14)); background:white; color:rgba(24,0,97,.78); border-radius:999px; padding:7px 10px; font-size:12px; font-weight:700; cursor:pointer; transition:all .15s ease; }
+      .sr-mvp-pill:hover { transform:translateY(-1px); border-color:rgba(24,0,97,.28); }
+      .sr-mvp-pill.is-active { background:#180061; border-color:#180061; color:white; box-shadow:0 8px 18px rgba(24,0,97,.14); }
+      .sr-mvp-pill.response-Watch.is-active { background:#2f6db3; border-color:#2f6db3; }
+      .sr-mvp-pill.response-Prepare.is-active { background:#180061; border-color:#180061; }
+      .sr-mvp-pill.response-Act.is-active { background:#d94a55; border-color:#d94a55; }
+      .sr-mvp-note { width:100%; min-height:92px; resize:vertical; border:1px solid var(--foresight-border, rgba(24,0,97,.14)); border-radius:14px; padding:11px 12px; font:inherit; font-size:13px; color:#180061; background:white; outline:none; }
+      .sr-mvp-note:focus { border-color:#180061; box-shadow:0 0 0 3px rgba(24,0,97,.08); }
+      .sr-mvp-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+      .sr-mvp-small { font-size:12px; color:rgba(24,0,97,.65); line-height:1.45; }
+      .sr-mvp-status { font-size:12px; color:rgba(24,0,97,.68); }
+      .sr-mvp-signal-title { font-weight:760; font-size:16px; line-height:1.25; color:#180061; margin-top:4px; }
+      .sr-mvp-meta { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+      .sr-mvp-tag { display:inline-flex; align-items:center; border:1px solid var(--foresight-border, rgba(24,0,97,.14)); border-radius:999px; padding:4px 7px; font-size:11px; color:rgba(24,0,97,.76); background:white; }
+      .sr-mvp-summary-list { margin:9px 0 0; padding:0; list-style:none; display:grid; gap:7px; }
+      .sr-mvp-summary-list li { font-size:12px; line-height:1.42; color:rgba(24,0,97,.76); padding-left:14px; position:relative; }
+      .sr-mvp-summary-list li:before { content:'•'; position:absolute; left:0; color:#ffd400; font-weight:900; }
+      .sr-mvp-empty { border:1px dashed var(--foresight-border, rgba(24,0,97,.22)); border-radius:16px; padding:16px; background:rgba(255,255,255,.56); }
+      [data-testid^="radar-dot-"].sr-mvp-assessed circle:first-of-type { stroke:#ffd400 !important; stroke-width:3 !important; filter:drop-shadow(0 0 4px rgba(255,212,0,.55)); }
+      .dark .sr-mvp-section, .dark .sr-mvp-pill, .dark .sr-mvp-note, .dark .sr-mvp-tag { background:hsl(var(--card) / .88); border-color:hsl(var(--border) / 1); color:hsl(var(--foreground) / .92); }
+      .dark .sr-mvp-signal-title { color:hsl(var(--foreground) / 1); }
+      .dark .sr-mvp-label, .dark .sr-mvp-small, .dark .sr-mvp-status, .dark .sr-mvp-summary-list li { color:hsl(var(--muted-foreground) / 1); }
+      .dark .sr-mvp-empty { background:hsl(var(--muted) / .34); border-color:hsl(var(--border) / 1); }
+      .dark .sr-mvp-pill.is-active { background:hsl(var(--primary) / 1); border-color:hsl(var(--primary) / 1); color:hsl(var(--primary-foreground) / 1); }
+      @media (max-width: 900px) { .sr-mvp-grid { grid-template-columns:1fr; } }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function buttonGroup(field, values, current) {
+    return '<div class="sr-mvp-pill-row">' + values.map(function (value) {
+      const responseClass = field === 'response' ? ' response-' + value : '';
+      return '<button type="button" class="sr-mvp-pill' + responseClass + (current === value ? ' is-active' : '') + '" data-sr-field="' + esc(field) + '" data-sr-value="' + esc(value) + '">' + esc(value) + '</button>';
+    }).join('') + '</div>';
+  }
+
+  function summaryHtml(assessments) {
+    const entries = Object.keys(assessments).map(function (id) {
+      return Object.assign({ signalId: id }, assessments[id] || {});
+    }).filter(function (item) {
+      return item.impact || item.uncertainty || item.response || item.note || item.important;
+    });
+    const byId = new Map(readSignals().map(function (signal) { return [signalId(signal), signal]; }));
+    const priorities = entries.filter(function (item) {
+      return item.impact === 'High' && (item.response === 'Prepare' || item.response === 'Act' || item.important);
+    });
+    const scenarioDrivers = entries.filter(function (item) {
+      return item.impact === 'High' && item.uncertainty === 'High';
+    });
+    const actNow = entries.filter(function (item) { return item.response === 'Act'; });
+    const list = priorities.slice(0, 4).map(function (item) {
+      const signal = byId.get(item.signalId) || {};
+      const title = getField(signal, ['title', 'Title'], item.signalId);
+      return '<li><strong>' + esc(item.signalId) + '</strong> · ' + esc(title) + '</li>';
+    }).join('');
+    return `
+      <div class="sr-mvp-section">
+        <div class="foresight-kicker">Executive snapshot</div>
+        <div class="foresight-grid foresight-grid-3" style="margin-top:10px;">
+          <div class="foresight-card"><div class="foresight-kicker">Assessed</div><div class="foresight-stat" style="font-size:24px;">${entries.length}</div><div class="foresight-body">signals with saved judgement</div></div>
+          <div class="foresight-card"><div class="foresight-kicker">Priorities</div><div class="foresight-stat" style="font-size:24px;">${priorities.length}</div><div class="foresight-body">high-impact signals to prepare or act on</div></div>
+          <div class="foresight-card"><div class="foresight-kicker">Scenario drivers</div><div class="foresight-stat" style="font-size:24px;">${scenarioDrivers.length}</div><div class="foresight-body">high impact + high uncertainty</div></div>
+        </div>
+        <div class="sr-mvp-small" style="margin-top:10px;">${actNow.length ? actNow.length + ' signal' + (actNow.length === 1 ? '' : 's') + ' marked Act.' : 'No signals marked Act yet.'}</div>
+        ${list ? '<ul class="sr-mvp-summary-list">' + list + '</ul>' : '<div class="sr-mvp-small" style="margin-top:9px;">Start by assessing a few dots. High-impact signals marked Prepare or Act will appear here.</div>'}
+      </div>
+    `;
+  }
+
+  function renderAssessmentPanel() {
+    if (!isRadarPage()) return;
+    ensureStyles();
+    const radar = document.querySelector('[data-testid="signal-radar"]');
+    if (!radar) return;
+
+    let host = document.getElementById('signal-radar-mvp-panel');
+    if (!host) {
+      const pageContainer = radar.closest('.space-y-6') || radar.closest('main') || document.querySelector('main');
+      const radarBlock = radar.closest('section, article, [role=region]') || radar.closest('.foresight-panel') || radar.parentElement;
+      host = document.createElement('section');
+      host.id = 'signal-radar-mvp-panel';
+      host.className = 'foresight-panel sr-mvp-panel';
+      host.setAttribute('aria-label', 'Optional signal sensemaking');
+
+      // Keep the radar itself as the primary browsing experience.
+      // The optional assessment workspace is placed at the bottom of the Signal Radar page.
+      if (pageContainer && pageContainer.appendChild) pageContainer.appendChild(host);
+      else if (radarBlock && radarBlock.insertAdjacentElement) radarBlock.insertAdjacentElement('afterend', host);
+      else document.body.appendChild(host);
+      host.addEventListener('click', onPanelClick);
+    }
+
+    const selectedId = getSelectedId();
+    const signal = selectedId ? findSignal(selectedId) : null;
+    const assessments = readAssessments();
+    const saved = selectedId ? assessments[selectedId] || {} : {};
+
+    if (!signal) {
+      host.innerHTML = `
+        <div class="foresight-kicker">Optional signal sensemaking</div>
+        <h2 class="foresight-title" style="font-size:24px; margin-top:6px;">Assess the dots with three simple judgements</h2>
+        <div class="sr-mvp-grid">
+          <div class="sr-mvp-empty">
+            <div class="sr-mvp-signal-title">Click a radar dot to start</div>
+            <p class="sr-mvp-small" style="margin-top:7px;">For each signal, select impact, uncertainty and response. Add one short strategic note if useful. Assessments are saved locally in this browser.</p>
+          </div>
+          ${summaryHtml(assessments)}
+        </div>
+      `;
+      markAssessedDots();
+      return;
+    }
+
+    const title = getField(signal, ['title', 'Title'], selectedId);
+    const description = getField(signal, ['description', 'Description'], '');
+    const pestec = getField(signal, ['pestecClass', 'pesteclClass', 'PESTEC class', 'PESTECL class', 'PESTEC', 'pestec'], 'Unspecified');
+    const domain = getField(signal, ['aiDomain', 'AI domain', 'AI Domain'], 'Unspecified');
+    const direction = getField(signal, ['direction', 'Direction'], 'Mixed');
+
+    host.innerHTML = `
+      <div class="foresight-kicker">Optional signal sensemaking</div>
+      <h2 class="foresight-title" style="font-size:24px; margin-top:6px;">Assess this signal</h2>
+      <div class="sr-mvp-grid">
+        <div class="sr-mvp-section">
+          <div class="sr-mvp-small"><strong>${esc(selectedId)}</strong></div>
+          <div class="sr-mvp-signal-title">${esc(title)}</div>
+          ${description ? '<p class="sr-mvp-small" style="margin-top:7px;">' + esc(description).slice(0, 360) + (description.length > 360 ? '…' : '') + '</p>' : ''}
+          <div class="sr-mvp-meta">
+            <span class="sr-mvp-tag">${esc(pestec)}</span>
+            <span class="sr-mvp-tag">${esc(domain)}</span>
+            <span class="sr-mvp-tag">${esc(direction)}</span>
+          </div>
+
+          <div class="sr-mvp-controls">
+            <div class="sr-mvp-row">
+              <div class="sr-mvp-label">Impact</div>
+              ${buttonGroup('impact', LEVELS, saved.impact)}
+            </div>
+            <div class="sr-mvp-row">
+              <div class="sr-mvp-label">Uncertainty</div>
+              ${buttonGroup('uncertainty', LEVELS, saved.uncertainty)}
+            </div>
+            <div class="sr-mvp-row">
+              <div class="sr-mvp-label">Recommended response</div>
+              ${buttonGroup('response', RESPONSES, saved.response)}
+            </div>
+            <div class="sr-mvp-row">
+              <div class="sr-mvp-label">Strategic note</div>
+              <textarea class="sr-mvp-note" id="sr-mvp-note" placeholder="Add one short note: why this matters, what to monitor, or what action it could suggest.">${esc(saved.note || '')}</textarea>
+            </div>
+            <div class="sr-mvp-actions">
+              <button type="button" class="foresight-button" data-sr-action="save-note">Save note</button>
+              <button type="button" class="foresight-button secondary" data-sr-action="toggle-important">${saved.important ? '★ Important' : '☆ Mark important'}</button>
+              <button type="button" class="foresight-button secondary" data-sr-action="clear-current">Clear assessment</button>
+              <span class="sr-mvp-status" id="sr-mvp-status">${saved.updatedAt ? 'Saved locally.' : 'Not assessed yet.'}</span>
+            </div>
+          </div>
+        </div>
+        ${summaryHtml(assessments)}
+      </div>
+    `;
+    markAssessedDots();
+  }
+
+  function onPanelClick(event) {
+    const fieldButton = event.target.closest('[data-sr-field][data-sr-value]');
+    const actionButton = event.target.closest('[data-sr-action]');
+    const selectedId = getSelectedId();
+    if (!selectedId) return;
+
+    if (fieldButton) {
+      const field = fieldButton.getAttribute('data-sr-field');
+      const value = fieldButton.getAttribute('data-sr-value');
+      const updates = {};
+      updates[field] = value;
+      upsertAssessment(selectedId, updates);
+      renderAssessmentPanel();
+      flashStatus('Saved locally.');
+      return;
+    }
+
+    if (!actionButton) return;
+    const action = actionButton.getAttribute('data-sr-action');
+    if (action === 'save-note') {
+      const note = document.getElementById('sr-mvp-note');
+      upsertAssessment(selectedId, { note: note ? note.value.trim() : '' });
+      renderAssessmentPanel();
+      flashStatus('Note saved locally.');
+    }
+    if (action === 'toggle-important') {
+      const current = readAssessments()[selectedId] || {};
+      upsertAssessment(selectedId, { important: !current.important });
+      renderAssessmentPanel();
+      flashStatus('Priority marker updated.');
+    }
+    if (action === 'clear-current') {
+      const assessments = readAssessments();
+      delete assessments[selectedId];
+      writeAssessments(assessments);
+      removeEmptyAssessment(selectedId);
+      renderAssessmentPanel();
+      flashStatus('Assessment cleared.');
+    }
+  }
+
+  function flashStatus(message) {
+    setTimeout(function () {
+      const status = document.getElementById('sr-mvp-status');
+      if (status) status.textContent = message;
+    }, 0);
+  }
+
+  function markAssessedDots() {
+    const assessments = readAssessments();
+    document.querySelectorAll('[data-testid^="radar-dot-"]').forEach(function (dot) {
+      const id = dot.getAttribute('data-testid').replace(/^radar-dot-/, '');
+      if (assessments[id] && (assessments[id].impact || assessments[id].uncertainty || assessments[id].response || assessments[id].note || assessments[id].important)) {
+        dot.classList.add('sr-mvp-assessed');
+      } else {
+        dot.classList.remove('sr-mvp-assessed');
+      }
+    });
+  }
+
+  document.addEventListener('click', function (event) {
+    const dot = event.target.closest && event.target.closest('[data-testid^="radar-dot-"]');
+    if (!dot) return;
+    const id = dot.getAttribute('data-testid').replace(/^radar-dot-/, '');
+    setSelectedId(id);
+    setTimeout(renderAssessmentPanel, 60);
+  }, true);
+
+  function scheduleRender() {
+    setTimeout(renderAssessmentPanel, 60);
+    setTimeout(renderAssessmentPanel, 450);
+    setTimeout(markAssessedDots, 900);
+  }
+
+  window.addEventListener('hashchange', scheduleRender);
+  document.addEventListener('DOMContentLoaded', scheduleRender);
+  if (document.readyState !== 'loading') scheduleRender();
+  new MutationObserver(function () {
+    if (isRadarPage()) setTimeout(markAssessedDots, 80);
+  }).observe(document.documentElement, { childList: true, subtree: true });
+})();
+</script>
+
 
 </body>
 </html>
