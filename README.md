@@ -125,3 +125,8 @@ In the radar view, users can click a signal dot and add a simple local assessmen
 The feature is intentionally simple and stores assessments in the visitor's browser local storage. It does not require a backend and does not change the main layout or the `signals.json` database.
 
 Assessed dots are visually highlighted with a subtle yellow outline. A small executive snapshot summarises how many signals have been assessed, how many are high-impact priorities, and how many are high-impact/high-uncertainty scenario drivers.
+
+
+## GitHub Pages deployment checklist
+
+Upload the extracted files at the repository root, preserving `assets/brand/`, `signals.json`, `site.webmanifest`, and `.nojekyll`. Do not upload the package as a nested folder. If the site shows old data, hard-refresh the page and clear local browser storage for the site.
