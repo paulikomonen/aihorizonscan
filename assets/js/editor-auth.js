@@ -3,31 +3,78 @@
   const backend = window.AIHorizonBackend;
   if (!backend || !backend.state.configured || !backend.client) return;
   const client = backend.client;
+  const unlockKey = "__aihorizon_admin_unlocked_v1";
   let processing = false;
+
+  function onUpdatePage() {
+    return (window.location.hash || "").includes("/update");
+  }
+
+  function clearLocalEditorAccess() {
+    try { sessionStorage.removeItem(unlockKey); } catch (error) {}
+  }
 
   async function permanentSession() {
     const result = await client.auth.getSession();
-    const user = result.data && result.data.session && result.data.session.user;
+    const session = result.data && result.data.session;
+    const user = session && session.user;
     if (!user || user.is_anonymous) return null;
     const access = await client.rpc("is_editor");
     if (access.error || access.data !== true) return null;
-    return result.data.session;
+    return session;
   }
 
-  async function unlockIfEditor() {
-    const session = await permanentSession();
-    if (!session) return false;
-    try { sessionStorage.setItem("__aihorizon_admin_unlocked_v1", "unlocked"); } catch (error) {}
-    return true;
+  function unlockEditor() {
+    try { sessionStorage.setItem(unlockKey, "unlocked"); } catch (error) {}
+  }
+
+  function renderEditorStatus(session) {
+    if (!onUpdatePage() || !session || document.getElementById("aih-editor-session")) return;
+    const heading = Array.from(document.querySelectorAll("h1")).find(function (item) {
+      return String(item.textContent || "").trim() === "Update tracker";
+    });
+    if (!heading) return;
+    const header = heading.closest("header") || heading.parentElement;
+    const bar = document.createElement("div");
+    bar.id = "aih-editor-session";
+    bar.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;padding:8px 10px;border:1px solid hsl(var(--border));border-radius:10px;background:hsl(var(--card));font-size:12px;color:hsl(var(--muted-foreground))";
+    bar.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#2a9d62;box-shadow:0 0 0 4px rgba(42,157,98,.12)"></span><span>Editor signed in as <strong style="color:hsl(var(--foreground))"></strong></span><button type="button" id="aih-editor-signout" style="margin-left:auto;border:1px solid hsl(var(--border));border-radius:8px;padding:5px 8px;background:hsl(var(--background));color:hsl(var(--foreground));font-weight:650;cursor:pointer">Sign out</button>';
+    bar.querySelector("strong").textContent = session.user.email || "approved editor";
+    header.appendChild(bar);
+    bar.querySelector("#aih-editor-signout").addEventListener("click", async function () {
+      if (processing) return;
+      processing = true;
+      this.disabled = true;
+      this.textContent = "Signing out…";
+      clearLocalEditorAccess();
+      try { await client.auth.signOut(); } catch (error) {}
+      window.location.reload();
+    });
   }
 
   async function renderEditorLogin() {
-    if (!(window.location.hash || "").includes("/update") || processing) return;
-    if (await unlockIfEditor()) {
-      if (document.querySelector('[data-testid="input-admin-password"]')) window.location.reload();
+    if (!onUpdatePage() || processing) return;
+    const session = await permanentSession();
+    const legacyInput = document.querySelector('[data-testid="input-admin-password"]');
+
+    if (session) {
+      unlockEditor();
+      renderEditorStatus(session);
+      if (legacyInput) window.location.reload();
       return;
     }
-    const legacyInput = document.querySelector('[data-testid="input-admin-password"]');
+
+    // A browser-only unlock marker must never outlive the Supabase session.
+    let hadUnlock = false;
+    try { hadUnlock = sessionStorage.getItem(unlockKey) === "unlocked"; } catch (error) {}
+    if (hadUnlock) {
+      clearLocalEditorAccess();
+      if (!legacyInput) {
+        window.location.reload();
+        return;
+      }
+    }
+
     if (!legacyInput) return;
     const card = legacyInput.closest(".w-full.max-w-md") || legacyInput.parentElement;
     if (!card || card.dataset.editorAuth === "ready") return;
@@ -37,45 +84,72 @@
         <div>
           <div class="text-xs uppercase tracking-wider text-muted-foreground">Secure editor access</div>
           <h2 class="text-xl font-semibold" style="margin-top:6px">Sign in to update signals</h2>
-          <p class="text-sm text-muted-foreground" style="margin-top:7px">Enter an allow-listed editor email address. Supabase will send a passwordless sign-in link.</p>
+          <p class="text-sm text-muted-foreground" style="margin-top:7px">Use the email address and password configured for your approved Supabase editor account.</p>
         </div>
         <form id="aih-editor-form" class="space-y-3">
-          <input id="aih-editor-email" type="email" required autocomplete="email" placeholder="name@organisation.fi" class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-          <button type="submit" class="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">Send sign-in link</button>
+          <input id="aih-editor-email" type="email" required autocomplete="username" placeholder="name@organisation.fi" class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+          <input id="aih-editor-password" type="password" required autocomplete="current-password" placeholder="Password" class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+          <button type="submit" class="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">Sign in</button>
         </form>
-        <div id="aih-editor-message" class="text-xs text-muted-foreground"></div>
+        <div id="aih-editor-message" class="text-xs text-muted-foreground" aria-live="polite"></div>
         <p class="text-xs text-muted-foreground">Workshop participants do not need an editor account.</p>
       </div>`;
+
     card.querySelector("#aih-editor-form").addEventListener("submit", async function (event) {
       event.preventDefault();
-      const email = card.querySelector("#aih-editor-email").value.trim();
+      const email = card.querySelector("#aih-editor-email").value.trim().toLowerCase();
+      const password = card.querySelector("#aih-editor-password").value;
       const message = card.querySelector("#aih-editor-message");
+      const button = card.querySelector('button[type="submit"]');
       processing = true;
-      message.textContent = "Sending sign-in link…";
+      button.disabled = true;
+      button.textContent = "Signing in…";
+      message.textContent = "Checking editor credentials…";
       try {
         const current = await client.auth.getSession();
         if (current.data.session && current.data.session.user && current.data.session.user.is_anonymous) await client.auth.signOut();
-        // Supabase may place authentication tokens in the URL fragment. The
-        // application also uses that fragment for routing, so returning
-        // directly to #/update can make the router interpret auth parameters
-        // as an unknown page. Complete authentication on a dedicated static
-        // callback page first, then continue to the Update tracker.
-        const redirect = new URL("./auth-callback.html", window.location.href).href;
-        const result = await client.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect } });
+        const result = await client.auth.signInWithPassword({ email: email, password: password });
         if (result.error) throw result.error;
-        message.textContent = "Check your email and open the sign-in link in this browser. Access is granted only to allow-listed editors.";
+        const access = await client.rpc("is_editor");
+        if (access.error) throw access.error;
+        if (access.data !== true) {
+          await client.auth.signOut();
+          throw new Error("This account is valid but is not on the editor allow-list.");
+        }
+        unlockEditor();
+        message.textContent = "Editor access confirmed. Opening the Update tracker…";
+        window.location.reload();
       } catch (error) {
-        message.textContent = error.message || "The sign-in link could not be sent.";
-      } finally {
+        clearLocalEditorAccess();
+        message.textContent = error.message || "The email or password was not accepted.";
         processing = false;
+        button.disabled = false;
+        button.textContent = "Sign in";
       }
     });
   }
 
-  client.auth.onAuthStateChange(function (_event, session) {
-    if (session && session.user && !session.user.is_anonymous) unlockIfEditor().then(function (allowed) {
-      if (allowed && (window.location.hash || "").includes("/update")) setTimeout(function () { window.location.reload(); }, 50);
-    });
+  client.auth.onAuthStateChange(function (event, session) {
+    if (processing) return;
+    if (event === "SIGNED_OUT") {
+      clearLocalEditorAccess();
+      if (onUpdatePage()) setTimeout(function () { window.location.reload(); }, 50);
+      return;
+    }
+    if (!session) {
+      clearLocalEditorAccess();
+      return;
+    }
+    if (session.user && !session.user.is_anonymous) {
+      setTimeout(function () {
+        permanentSession().then(function (approvedSession) {
+          if (!approvedSession) return;
+          unlockEditor();
+          if (document.querySelector('[data-testid="input-admin-password"]')) window.location.reload();
+          else renderEditorStatus(approvedSession);
+        });
+      }, 0);
+    }
   });
   window.addEventListener("hashchange", function () { setTimeout(renderEditorLogin, 100); });
   new MutationObserver(function () { setTimeout(renderEditorLogin, 80); }).observe(document.documentElement, { childList: true, subtree: true });
