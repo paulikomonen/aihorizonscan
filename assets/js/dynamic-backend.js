@@ -251,15 +251,16 @@
       const match = pathname.match(/^\/api\/signals\/([^/]+)$/);
       if (method === "DELETE" && match) {
         const signalId = decodeURIComponent(match[1]);
+        const access = await state.client.rpc("is_editor");
+        if (access.error) throw access.error;
+        if (access.data !== true) throw new Error("Editor authentication is required to delete signals.");
         const result = await state.client
           .from("signals")
           .update({ is_archived: true, updated_at: new Date().toISOString() })
-          .eq("signal_id", signalId)
-          .select()
-          .single();
+          .eq("signal_id", signalId);
         if (result.error) throw result.error;
         await loadSignals();
-        return jsonResponse({ signal: toSignal(result.data) });
+        return jsonResponse({ signal: { signalId: signalId }, archived: true });
       }
       return fallbackFetch(input, options);
     } catch (error) {
