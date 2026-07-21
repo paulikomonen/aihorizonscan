@@ -130,3 +130,7 @@ Assessed dots are visually highlighted with a subtle yellow outline. A small exe
 ## GitHub Pages deployment checklist
 
 Upload the extracted files at the repository root, preserving `assets/brand/`, `signals.json`, `site.webmanifest`, and `.nojekyll`. Do not upload the package as a nested folder. If the site shows old data, hard-refresh the page and clear local browser storage for the site.
+
+## Collaborative workshop prototype
+
+The repository includes an optional Supabase-backed mode for dynamic signals and anonymous, aggregated workshop ratings. It is disabled by default, so the existing GitHub Pages behaviour remains unchanged until the project configuration is added. See [`WORKSHOP_BACKEND.md`](WORKSHOP_BACKEND.md) for the database, security and deployment instructions.
