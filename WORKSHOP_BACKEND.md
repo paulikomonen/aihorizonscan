@@ -13,7 +13,7 @@ The site retains its existing local-only behaviour until `config.js` contains a 
 7. Allow-list the same lower-case email in the SQL editor, for example `insert into public.editor_accounts(email) values ('editor@example.org') on conflict (email) do nothing;`.
 8. Open the radar with a workshop parameter, for example `?workshop=prototype#/radar`.
 
-For a project that was created with an earlier version of `schema.sql`, run `supabase/assessment-reset-migration.sql` once before deploying the assessment-clear control. The migration preserves current ratings and adds workshop assessment-round versioning.
+For a project that was created with an earlier version of `schema.sql`, run `supabase/assessment-reset-migration.sql` once before deploying the assessment-clear control. The migration preserves current ratings and adds workshop assessment-round versioning. Also run `supabase/editor-signal-archive-migration.sql` once so approved editors can archive signals under row-level security.
 
 The browser key is intentionally public. Never place a Supabase service-role key in `config.js` or any GitHub repository.
 
