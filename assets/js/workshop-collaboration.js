@@ -40,6 +40,33 @@
     } catch (error) { return null; }
   }
 
+  function workshopVersionKey() {
+    return "ai-horizon-radar.workshop-version." + workshopSlug;
+  }
+
+  function applyWorkshopVersion(nextWorkshop) {
+    if (!nextWorkshop || nextWorkshop.ratings_version == null) return false;
+    try {
+      const key = workshopVersionKey();
+      const nextVersion = String(Number(nextWorkshop.ratings_version) || 0);
+      const previousVersion = localStorage.getItem(key);
+      const hasOldAssessments = Boolean(localStorage.getItem(localKey));
+      const shouldClear = previousVersion !== null
+        ? previousVersion !== nextVersion
+        : Number(nextVersion) > 0 && hasOldAssessments;
+      localStorage.setItem(key, nextVersion);
+      if (!shouldClear) return false;
+      localStorage.removeItem(localKey);
+      localStorage.removeItem(selectedKey);
+      lastPayload = "";
+      setTimeout(function () { window.location.reload(); }, 80);
+      return true;
+    } catch (error) {
+      console.error("Could not apply workshop assessment reset", error);
+      return false;
+    }
+  }
+
   function readSignals() {
     try {
       const parsed = JSON.parse(localStorage.getItem(signalsKey) || "null");
@@ -208,6 +235,12 @@
     if (!enabled || !workshop || workshop.status !== "open" || refreshing) return;
     refreshing = true;
     try {
+      const latestWorkshop = await backend.getWorkshop(workshopSlug);
+      if (latestWorkshop) {
+        const resetDetected = applyWorkshopVersion(latestWorkshop);
+        workshop = latestWorkshop;
+        if (resetDetected) return;
+      }
       const rows = await backend.getAggregates(workshopSlug);
       aggregates = new Map(rows.map(function (row) { return [row.signal_id, row]; }));
       lastRefreshAt = new Date();
@@ -228,7 +261,13 @@
     if (payload === lastPayload) return;
     lastPayload = payload;
     try {
-      if (rating) await backend.saveRating(workshop.id, id, rating);
+      const latestWorkshop = await backend.getWorkshop(workshopSlug);
+      if (latestWorkshop) {
+        const resetDetected = applyWorkshopVersion(latestWorkshop);
+        workshop = latestWorkshop;
+        if (resetDetected) return;
+      }
+      if (rating) await backend.saveRating(workshop.id, id, rating, workshop.ratings_version);
       else await backend.deleteRating(workshop.id, id);
       await refreshAggregates();
       const status = document.getElementById("sr-mvp-status");
@@ -262,6 +301,7 @@
       try {
         await backend.ensureAnonymousSession();
         workshop = await backend.getWorkshop(workshopSlug);
+        if (applyWorkshopVersion(workshop)) return;
         if (workshop && workshop.status === "open") await refreshAggregates();
       } catch (error) {
         console.error("Workshop collaboration could not initialise", error);

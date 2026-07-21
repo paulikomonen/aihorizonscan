@@ -55,7 +55,12 @@
       try {
         const current = await client.auth.getSession();
         if (current.data.session && current.data.session.user && current.data.session.user.is_anonymous) await client.auth.signOut();
-        const redirect = window.location.origin + window.location.pathname + "#/update";
+        // Supabase may place authentication tokens in the URL fragment. The
+        // application also uses that fragment for routing, so returning
+        // directly to #/update can make the router interpret auth parameters
+        // as an unknown page. Complete authentication on a dedicated static
+        // callback page first, then continue to the Update tracker.
+        const redirect = new URL("./auth-callback.html", window.location.href).href;
         const result = await client.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect } });
         if (result.error) throw result.error;
         message.textContent = "Check your email and open the sign-in link in this browser. Access is granted only to allow-listed editors.";

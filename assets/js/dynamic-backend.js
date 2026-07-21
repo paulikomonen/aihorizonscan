@@ -102,15 +102,24 @@
     ensureAnonymousSession,
     async getWorkshop(slug) {
       if (!state.client) return null;
-      const result = await state.client
+      let result = await state.client
         .from("workshops")
-        .select("id, slug, title, status, opens_at, closes_at")
+        .select("id, slug, title, status, opens_at, closes_at, ratings_version")
         .eq("slug", slug)
         .maybeSingle();
+      // Keep ratings working while the reset migration is being deployed.
+      // The clear control remains unavailable until ratings_version exists.
+      if (result.error && /ratings_version/i.test(result.error.message || "")) {
+        result = await state.client
+          .from("workshops")
+          .select("id, slug, title, status, opens_at, closes_at")
+          .eq("slug", slug)
+          .maybeSingle();
+      }
       if (result.error) throw result.error;
       return result.data;
     },
-    async saveRating(workshopId, signalId, rating) {
+    async saveRating(workshopId, signalId, rating, workshopVersion) {
       const session = await ensureAnonymousSession();
       if (!session || !session.user) throw new Error("Anonymous workshop session could not be created.");
       const payload = {
@@ -124,6 +133,7 @@
         note: rating.note || null,
         updated_at: new Date().toISOString()
       };
+      if (workshopVersion != null) payload.workshop_version = Number(workshopVersion) || 0;
       const result = await state.client
         .from("ratings")
         .upsert(payload, { onConflict: "workshop_id,signal_id,participant_id" })
@@ -150,6 +160,14 @@
       });
       if (result.error) throw result.error;
       return result.data || [];
+    },
+    async clearWorkshopRatings(slug) {
+      if (!state.client) throw new Error("Supabase is not configured.");
+      const result = await state.client.rpc("clear_workshop_ratings", {
+        p_workshop_slug: slug
+      });
+      if (result.error) throw result.error;
+      return (result.data && result.data[0]) || { deleted_count: 0, ratings_version: null };
     }
   };
 
