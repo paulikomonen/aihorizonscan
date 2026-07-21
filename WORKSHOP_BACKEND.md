@@ -27,6 +27,7 @@ The browser key is intentionally public. Never place a Supabase service-role key
 - A yellow dot outline means "rated in this browser". A green dashed ring means "has workshop group ratings"; a dot may have both.
 - Anonymous users cannot modify signals or workshops.
 - Allow-listed permanent users manage signals and workshops through direct Supabase email-and-password login. Sign-in does not use email links, callback pages or hash-router redirects.
+- The Update Tracker can synchronize the complete `Signals` worksheet from the Excel master. Matching IDs are updated, new IDs are added, and active IDs missing from the workbook are archived after confirmation; other worksheets are ignored.
 - The Update Tracker displays the signed-in editor and provides a sign-out button. Its browser unlock marker is removed whenever the Supabase session is missing or signed out.
 - Allow-listed editors can clear all assessments for the active workshop from **Update tracker**. The destructive action requires typing `CLEAR`, deletes shared ratings and notes, and advances the workshop's assessment-round version.
 - If the database is unavailable or unconfigured, signals and assessments continue to work locally as before.

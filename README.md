@@ -26,6 +26,12 @@ The app is designed for a simple curated update workflow:
 
 When Supabase dynamic signals are enabled, the import is written directly to the shared `signals` table. Dashboard, Signal Radar, Signals and Innovation implications use the same refreshed dataset, and the data remains available after browser refresh. `signals.json` remains the local/offline fallback when Supabase is not configured.
 
+### Excel master synchronization
+
+The Update Tracker accepts the project master `.xlsx` workbook in addition to JSON. It reads only the worksheet named `Signals` and validates the 17-column signal template before enabling synchronization. Matching Signal IDs are updated, new IDs are inserted, and active database signals missing from the workbook are archived after an explicit summary and confirmation. Other workbook sheets are ignored.
+
+This workflow treats Excel as the editorial master and Supabase as the published website database. For each weekly or fortnightly update, upload the complete current workbook rather than a partial extract. The editor signal archive migration in `supabase/editor-signal-archive-migration.sql` must be installed before the first synchronization.
+
 JSON imports preserve `signalId` (including the legacy `Signal ID`, `Signal Id`, `SignalID`, `signalID`, and `id` aliases). If an imported row has no ID, the Update Tracker assigns the next available `AI-###` identifier. Supabase array columns are converted back to the semicolon-separated stage format expected by the bundled Dashboard charts.
 
 ## Editorial positioning
