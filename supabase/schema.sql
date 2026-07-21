@@ -94,6 +94,14 @@ create policy "Active signals are publicly readable"
   to anon, authenticated
   using (is_archived = false);
 
+-- Editors must also be allowed to see the post-update row when archiving a
+-- signal. Without this policy PostgreSQL rejects is_archived = true because
+-- the public SELECT policy hides the new row state during the UPDATE.
+create policy "Permanent users can read all signals"
+  on public.signals for select
+  to authenticated
+  using ((select public.is_editor()));
+
 create policy "Permanent users can create signals"
   on public.signals for insert
   to authenticated
