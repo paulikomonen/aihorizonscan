@@ -9,10 +9,9 @@ The site retains its existing local-only behaviour until `config.js` contains a 
 3. Run `supabase/schema.sql` in the SQL editor.
 4. Run `node scripts/generate-supabase-seed.mjs`, then run the generated `supabase/seed.sql` in the SQL editor.
 5. Copy the project URL and publishable key into `config.js`; enable both feature flags.
-6. Allow-list editors in the SQL editor, for example `insert into public.editor_accounts(email) values ('editor@example.org');`.
-7. In **Authentication → URL Configuration**, set the production **Site URL** and add the exact callback page to **Redirect URLs**, for example `https://paulikomonen.github.io/aihorizonscan/auth-callback.html`. Add the equivalent callback URL for each Netlify preview that needs editor login.
-8. If the Magic Link email template was customised, ensure its link uses Supabase's redirect target (`{{ .RedirectTo }}` or the standard confirmation URL containing it).
-9. Open the radar with a workshop parameter, for example `?workshop=prototype#/radar`.
+6. In **Authentication → Users**, create the editor user with an email address and strong password. Ensure the user is confirmed so password sign-in is permitted.
+7. Allow-list the same lower-case email in the SQL editor, for example `insert into public.editor_accounts(email) values ('editor@example.org') on conflict (email) do nothing;`.
+8. Open the radar with a workshop parameter, for example `?workshop=prototype#/radar`.
 
 For a project that was created with an earlier version of `schema.sql`, run `supabase/assessment-reset-migration.sql` once before deploying the assessment-clear control. The migration preserves current ratings and adds workshop assessment-round versioning.
 
@@ -27,8 +26,8 @@ The browser key is intentionally public. Never place a Supabase service-role key
 - Group totals, priorities and the selected signal's mean ratings refresh every four seconds while the Radar is visible. This uses the aggregate RPC rather than exposing the raw ratings table through Realtime.
 - A yellow dot outline means "rated in this browser". A green dashed ring means "has workshop group ratings"; a dot may have both.
 - Anonymous users cannot modify signals or workshops.
-- Allow-listed permanent users may manage signals and workshops through passwordless email login. The legacy `aiscan` browser gate is not database security.
-- Email magic links return to `auth-callback.html`, which completes the Supabase session and editor allow-list check before opening `#/update`. This prevents authentication fragments from being mistaken for application routes.
+- Allow-listed permanent users manage signals and workshops through direct Supabase email-and-password login. Sign-in does not use email links, callback pages or hash-router redirects.
+- The Update Tracker displays the signed-in editor and provides a sign-out button. Its browser unlock marker is removed whenever the Supabase session is missing or signed out.
 - Allow-listed editors can clear all assessments for the active workshop from **Update tracker**. The destructive action requires typing `CLEAR`, deletes shared ratings and notes, and advances the workshop's assessment-round version.
 - If the database is unavailable or unconfigured, signals and assessments continue to work locally as before.
 

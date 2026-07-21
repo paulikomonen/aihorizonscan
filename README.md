@@ -63,13 +63,13 @@ The embedded 100-signal database remains as an offline fallback for double-click
 
 ## Editing access
 
-The **Update tracker** tab and the **Delete signal** function are protected with the project password:
+Without Supabase configuration, the **Update tracker** tab and the **Delete signal** function retain the legacy project-password gate:
 
 ```text
 aiscan
 ```
 
-This is a lightweight client-side gate intended to prevent accidental edits in a limited project demo. It is not strong security, because static websites expose their HTML and JavaScript to visitors.
+This is only a lightweight client-side gate intended to prevent accidental edits in a limited local demo. When Supabase is configured, the frontend replaces it with direct email-and-password login and verifies the account against `editor_accounts`; database row-level security remains the actual authorization boundary.
 
 ## Sharing and security notes
 
@@ -138,3 +138,5 @@ The repository includes an optional Supabase-backed mode for dynamic signals and
 When enabled, the Radar also shows a **Workshop group snapshot** based on the aggregate database function. It refreshes automatically every four seconds while the Radar tab is visible. Green dashed rings identify signals with group ratings; the yellow outline continues to identify signals assessed in the current browser. Sector headings are positioned outside the plotting circle and a deterministic spacing pass keeps dense dot clusters from visually overlapping.
 
 Allow-listed editors can reset the active workshop's assessment round from **Update tracker**. The control requires an explicit `CLEAR` confirmation and removes ratings and notes without changing the signal database. Existing Supabase projects must run `supabase/assessment-reset-migration.sql` once before using it.
+
+Editor access uses Supabase email-and-password authentication. Create the editor in **Authentication → Users**, then add the same lower-case email to `public.editor_accounts`. No magic-link callback URL is required.
