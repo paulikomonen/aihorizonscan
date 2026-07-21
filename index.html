@@ -475,6 +475,12 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
 (function () {
   const CURRENT_STORAGE_KEY = 'ai-horizon-signal-tracker.signals.dynamic_json.v1';
 
+  function databaseMode() {
+    const backend = window.AIHorizonBackend;
+    return Boolean(backend && backend.state && backend.state.configured &&
+      (!window.AIHORIZON_CONFIG || window.AIHORIZON_CONFIG.enableDynamicSignals !== false));
+  }
+
   function isUpdatePage() {
     return (window.location.hash || '').startsWith('#/update');
   }
@@ -542,6 +548,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
   }
 
   function installExportPanel() {
+    if (databaseMode()) return removeExportPanel();
     if (!isUpdatePage()) return removeExportPanel();
     if (document.getElementById('export-permanent-html-panel')) return;
 
@@ -628,6 +635,11 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
 (function () {
   const STORAGE_KEY = 'ai-horizon-signal-tracker.signals.dynamic_json.v1';
   const LOCAL_EDITS_KEY = STORAGE_KEY + '.localEdits';
+
+  const backend = window.AIHorizonBackend;
+  const databaseMode = Boolean(backend && backend.state && backend.state.configured &&
+    (!window.AIHORIZON_CONFIG || window.AIHORIZON_CONFIG.enableDynamicSignals !== false));
+  if (databaseMode) return;
 
   function parseSignalsJson(raw) {
     const parsed = JSON.parse(raw);
@@ -786,7 +798,9 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
     replaceExactText('Live signal radar', 'Hybrid-scanned radar');
     replaceExactText('Weekly updated', 'Weekly updated');
     const updateText = 'Add signals to the database in three ways: (1) paste a single URL and let the platform classify it, (2) run a broad scan grounded in real web search results, or (3) bulk-import JSON.';
-    replaceExactText(updateText, 'Update the radar with expert-curated JSON signal batches. Validate the batch, import it, then download the updated signals.json file for GitHub.');
+    replaceExactText(updateText, 'Update the radar with expert-curated JSON signal batches. Validate and import the batch to save it permanently in the shared database.');
+    replaceExactText('Signals added here stay in this browser until you download and publish an updated signals.json file.', 'Imported signals are saved in the shared database and appear in the Dashboard, Signal Radar, Signals and Innovation implications views.');
+    replaceExactText('The imported batch is stored in your browser until you download the updated signals.json file for the hosted radar.', 'The imported batch is saved permanently in the shared database and becomes available across the website.');
   }
 
   if (document.readyState === 'loading') {
@@ -886,6 +900,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
   }
 
   function readSignalsSync() {
+    if (Array.isArray(window.__AIHORIZON_LIVE_SIGNALS)) return window.__AIHORIZON_LIVE_SIGNALS;
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
@@ -1022,7 +1037,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
         <div class="foresight-synthesis-card" style="margin-top:16px;" aria-label="Qualitative signal synthesis">
           <div class="foresight-kicker">Qualitative synthesis</div>
           <h3 class="foresight-title" style="font-size:21px; margin-top:7px;">System-level implications across the signal landscape</h3>
-          <p class="foresight-synthesis-text">Across the 100 signals, AI is shifting from a tool-centric productivity story to a system-level innovation management challenge: value increasingly depends on redesigned workflows, AI-ready data, assurance gates, regulatory and procurement evidence, and the ability to govern agents, open models and multimodal systems across the full innovation process. The landscape is broadly distributed across PESTEC categories, showing that technological progress is tightly coupled with political compliance and sovereignty, economic compute concentration and operating-model redesign, environmental energy and water constraints, social skills and trust dynamics, and cultural questions of authenticity, disclosure and IP. With Act, Prepare and Watch signals almost evenly spread, innovation teams need a dual posture: act now on governance, workflow redesign, cyber/content risks and infrastructure constraints; prepare capabilities for evaluation, data quality, skills, licensing and responsible scaling; and watch further-horizon discontinuities and wild cards such as deceptive agents and embodied-AI standardisation.</p>
+          <p class="foresight-synthesis-text">Across the current ${s.total}-signal set, AI is shifting from a tool-centric productivity story to a system-level innovation management challenge: value increasingly depends on redesigned workflows, AI-ready data, assurance gates, regulatory and procurement evidence, and the ability to govern agents, open models and multimodal systems across the full innovation process. The landscape is broadly distributed across PESTEC categories, showing that technological progress is tightly coupled with political compliance and sovereignty, economic compute concentration and operating-model redesign, environmental energy and water constraints, social skills and trust dynamics, and cultural questions of authenticity, disclosure and IP. Innovation teams need a dual posture: act now on governance, workflow redesign, cyber/content risks and infrastructure constraints; prepare capabilities for evaluation, data quality, skills, licensing and responsible scaling; and watch further-horizon discontinuities and wild cards such as deceptive agents and embodied-AI standardisation.</p>
         </div>
         <div class="foresight-grid foresight-grid-3" style="margin-top:14px;">
           <div class="foresight-card"><strong>Domains to inspect</strong><ul class="foresight-list">${domains.map(([k,v])=>`<li>${esc(k)} <span style="opacity:.7;">(${v})</span></li>`).join('')}</ul></div>
@@ -1085,7 +1100,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
         <div class="foresight-grid foresight-grid-3 foresight-flow" style="margin-top:14px;">
           <div class="foresight-card foresight-step"><strong>Paste JSON</strong><p class="foresight-body" style="margin-top:5px;">Use a JSON array or an object with a <code>signals</code> array.</p></div>
           <div class="foresight-card foresight-step"><strong>Validate preview</strong><p class="foresight-body" style="margin-top:5px;">Check signal count, required fields and likely duplicates before importing.</p></div>
-          <div class="foresight-card foresight-step"><strong>Update GitHub</strong><p class="foresight-body" style="margin-top:5px;">Download <code>signals.json</code>, replace the file in the repository and commit the update.</p></div>
+          <div class="foresight-card foresight-step"><strong>Save to database</strong><p class="foresight-body" style="margin-top:5px;">Import the validated batch. Supabase keeps it available after refresh and shares it with every visitor.</p></div>
         </div>
       </section>`, 'update-workflow-panel');
 
@@ -1216,6 +1231,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
   }
 
   function readSignals() {
+    if (Array.isArray(window.__AIHORIZON_LIVE_SIGNALS)) return window.__AIHORIZON_LIVE_SIGNALS;
     try {
       const stored = localStorage.getItem(SIGNALS_KEY);
       if (stored) {
