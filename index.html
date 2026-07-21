@@ -639,7 +639,6 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
   const backend = window.AIHorizonBackend;
   const databaseMode = Boolean(backend && backend.state && backend.state.configured &&
     (!window.AIHORIZON_CONFIG || window.AIHORIZON_CONFIG.enableDynamicSignals !== false));
-  if (databaseMode) return;
 
   function parseSignalsJson(raw) {
     const parsed = JSON.parse(raw);
@@ -712,7 +711,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
     status.style.border = isError ? '1px solid rgba(239,68,68,.35)' : '1px solid rgba(34,197,94,.35)';
   }
 
-  function handleStaticJsonImport(event) {
+  async function handleStaticJsonImport(event) {
     const button = event.target && event.target.closest && event.target.closest('[data-testid="button-import"]');
     if (!button) return;
     event.preventDefault();
@@ -729,6 +728,23 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
         current.push(signal);
         return signal;
       });
+      if (databaseMode) {
+        button.disabled = true;
+        showImportStatus(`Saving ${added.length} signal${added.length === 1 ? '' : 's'} to the shared database…`, false);
+        const response = await fetch('/api/signals/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ signals: added })
+        });
+        const payload = await response.json().catch(function () { return {}; });
+        if (!response.ok) throw new Error(payload.message || `Database import failed (${response.status}).`);
+        try {
+          sessionStorage.setItem('ai-horizon-signal-tracker.importNotice', `Imported ${added.length} signal${added.length === 1 ? '' : 's'} to the shared database.`);
+        } catch (error) {}
+        showImportStatus(`Imported ${added.length} signal${added.length === 1 ? '' : 's'}. Refreshing the shared dashboard…`, false);
+        setTimeout(function () { window.location.reload(); }, 350);
+        return;
+      }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
       localStorage.setItem(LOCAL_EDITS_KEY, 'true');
       try {
@@ -740,6 +756,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
         window.location.reload();
       }, 350);
     } catch (error) {
+      button.disabled = false;
       showImportStatus(error && error.message ? error.message : 'Import failed. Check that the JSON is valid.', true);
     }
   }

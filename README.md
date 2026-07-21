@@ -26,6 +26,8 @@ The app is designed for a simple curated update workflow:
 
 When Supabase dynamic signals are enabled, the import is written directly to the shared `signals` table. Dashboard, Signal Radar, Signals and Innovation implications use the same refreshed dataset, and the data remains available after browser refresh. `signals.json` remains the local/offline fallback when Supabase is not configured.
 
+JSON imports preserve `signalId` (including the legacy `Signal ID`, `Signal Id`, `SignalID`, `signalID`, and `id` aliases). If an imported row has no ID, the Update Tracker assigns the next available `AI-###` identifier. Supabase array columns are converted back to the semicolon-separated stage format expected by the bundled Dashboard charts.
+
 ## Editorial positioning
 
 The radar is positioned as a weekly updated foresight intelligence tool. Signals are hand-picked through hybrid scanning: AI-augmented signal detection, qualitative interpretation, structured source monitoring, quantitative patterning, foresight expert evaluation and manual curation.
