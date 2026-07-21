@@ -20,6 +20,8 @@ The browser key is intentionally public. Never place a Supabase service-role key
 - A browser has one editable rating per workshop and signal.
 - Raw rating rows are only readable by the participant who created them.
 - The Radar reads group aggregates through `get_workshop_aggregates`; participant IDs and notes are not exposed.
+- Group totals, priorities and the selected signal's mean ratings refresh every four seconds while the Radar is visible. This uses the aggregate RPC rather than exposing the raw ratings table through Realtime.
+- A yellow dot outline means "rated in this browser". A green dashed ring means "has workshop group ratings"; a dot may have both.
 - Anonymous users cannot modify signals or workshops.
 - Allow-listed permanent users may manage signals and workshops through passwordless email login. The legacy `aiscan` browser gate is not database security.
 - If the database is unavailable or unconfigured, signals and assessments continue to work locally as before.

@@ -124,7 +124,7 @@ In the radar view, users can click a signal dot and add a simple local assessmen
 
 The feature is intentionally simple and stores assessments in the visitor's browser local storage. It does not require a backend and does not change the main layout or the `signals.json` database.
 
-Assessed dots are visually highlighted with a subtle yellow outline. A small executive snapshot summarises how many signals have been assessed, how many are high-impact priorities, and how many are high-impact/high-uncertainty scenario drivers.
+Personally assessed dots are visually highlighted with a subtle yellow outline. The personal snapshot summarises how many signals this browser has assessed, how many are high-impact priorities, and how many are high-impact/high-uncertainty scenario drivers.
 
 
 ## GitHub Pages deployment checklist
@@ -134,3 +134,5 @@ Upload the extracted files at the repository root, preserving `assets/brand/`, `
 ## Collaborative workshop prototype
 
 The repository includes an optional Supabase-backed mode for dynamic signals and anonymous, aggregated workshop ratings. It is disabled by default, so the existing GitHub Pages behaviour remains unchanged until the project configuration is added. See [`WORKSHOP_BACKEND.md`](WORKSHOP_BACKEND.md) for the database, security and deployment instructions.
+
+When enabled, the Radar also shows a **Workshop group snapshot** based on the aggregate database function. It refreshes automatically every four seconds while the Radar tab is visible. Green dashed rings identify signals with group ratings; the yellow outline continues to identify signals assessed in the current browser. Sector headings are positioned outside the plotting circle and a deterministic spacing pass keeps dense dot clusters from visually overlapping.

@@ -1357,7 +1357,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
     }).join('');
     return `
       <div class="sr-mvp-section">
-        <div class="foresight-kicker">Executive snapshot</div>
+        <div class="foresight-kicker">Your assessment snapshot</div>
         <div class="foresight-grid foresight-grid-3" style="margin-top:10px;">
           <div class="foresight-card"><div class="foresight-kicker">Assessed</div><div class="foresight-stat" style="font-size:24px;">${entries.length}</div><div class="foresight-body">signals with saved judgement</div></div>
           <div class="foresight-card"><div class="foresight-kicker">Priorities</div><div class="foresight-stat" style="font-size:24px;">${priorities.length}</div><div class="foresight-body">high-impact signals to prepare or act on</div></div>
@@ -1404,7 +1404,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
         <div class="sr-mvp-grid">
           <div class="sr-mvp-empty">
             <div class="sr-mvp-signal-title">Click a radar dot to start</div>
-            <p class="sr-mvp-small" style="margin-top:7px;">For each signal, select impact, uncertainty and response. Add one short strategic note if useful. Assessments are saved locally in this browser.</p>
+            <p class="sr-mvp-small" style="margin-top:7px;">For each signal, select impact, uncertainty and response. Your editable assessment stays in this browser and is synced anonymously into the workshop totals.</p>
           </div>
           ${summaryHtml(assessments)}
         </div>
@@ -1549,6 +1549,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
 
 
 <script src="./assets/js/editor-auth.js"></script>
+<script src="./assets/js/radar-visual-fixes.js"></script>
 <script src="./assets/js/workshop-collaboration.js"></script>
 </body>
 </html>
