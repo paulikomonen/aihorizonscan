@@ -44,7 +44,9 @@
       mainActors: row.main_actors,
       direction: row.direction,
       indicators: row.indicators,
-      innovationStages: asArray(row.innovation_stages),
+      // Keep the public API compatible with the original static dataset. The
+      // bundled dashboard groups stages with String.split().
+      innovationStages: asArray(row.innovation_stages).join("; "),
       innovationImpact: row.innovation_impact,
       source: row.source,
       evidenceType: row.evidence_type,
