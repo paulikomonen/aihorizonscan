@@ -248,6 +248,50 @@
         await loadSignals();
         return jsonResponse({ signals: result.data.map(toSignal) }, 201);
       }
+      if (method === "POST" && pathname === "/api/signals/sync") {
+        const access = await state.client.rpc("is_editor");
+        if (access.error) throw access.error;
+        if (access.data !== true) throw new Error("Editor authentication is required to synchronize signals.");
+
+        const incoming = asArray(Array.isArray(body) ? body : body.signals);
+        if (!incoming.length) throw new Error("The Signals worksheet did not contain any records.");
+        const rows = incoming.map(fromSignal);
+        const incomingIds = new Set(rows.map(function (row) { return row.signal_id; }));
+        if (incomingIds.size !== rows.length) throw new Error("The workbook contains duplicate Signal IDs.");
+
+        const before = await state.client
+          .from("signals")
+          .select("signal_id")
+          .eq("is_archived", false);
+        if (before.error) throw before.error;
+        const activeIds = asArray(before.data).map(function (row) { return row.signal_id; });
+        const newCount = rows.filter(function (row) { return !activeIds.includes(row.signal_id); }).length;
+
+        const upserted = await state.client
+          .from("signals")
+          .upsert(rows, { onConflict: "signal_id" });
+        if (upserted.error) throw upserted.error;
+
+        const archivedIds = activeIds.filter(function (signalId) { return !incomingIds.has(signalId); });
+        if (archivedIds.length) {
+          const archived = await state.client
+            .from("signals")
+            .update({ is_archived: true, updated_at: new Date().toISOString() })
+            .in("signal_id", archivedIds);
+          if (archived.error) throw archived.error;
+        }
+
+        const signals = await loadSignals();
+        return jsonResponse({
+          signals: signals,
+          summary: {
+            workbookCount: rows.length,
+            newCount: newCount,
+            updatedCount: rows.length - newCount,
+            archivedCount: archivedIds.length
+          }
+        });
+      }
       const match = pathname.match(/^\/api\/signals\/([^/]+)$/);
       if (method === "DELETE" && match) {
         const signalId = decodeURIComponent(match[1]);
