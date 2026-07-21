@@ -68,6 +68,7 @@
   }
 
   function readSignals() {
+    if (Array.isArray(window.__AIHORIZON_LIVE_SIGNALS)) return window.__AIHORIZON_LIVE_SIGNALS;
     try {
       const parsed = JSON.parse(localStorage.getItem(signalsKey) || "null");
       if (Array.isArray(parsed)) return parsed;

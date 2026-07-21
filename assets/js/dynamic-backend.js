@@ -16,6 +16,8 @@
     lastError: null
   };
 
+  const signalCacheKey = "ai-horizon-signal-tracker.signals.dynamic_json.v1";
+
   function jsonResponse(data, status) {
     return Promise.resolve(new Response(JSON.stringify(data), {
       status: status || 200,
@@ -50,6 +52,18 @@
     };
   }
 
+  function generatedSignalId(signal) {
+    const source = [signal.title, signal.source, signal.date]
+      .map(function (value) { return String(value || "").trim().toLowerCase(); })
+      .join("|");
+    let hash = 2166136261;
+    for (let index = 0; index < source.length; index += 1) {
+      hash ^= source.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return "AI-" + (hash >>> 0).toString(16).toUpperCase().padStart(8, "0");
+  }
+
   function fromSignal(signal) {
     const stages = Array.isArray(signal.innovationStages)
       ? signal.innovationStages
@@ -58,7 +72,7 @@
           .map(function (item) { return item.trim(); })
           .filter(Boolean);
     return {
-      signal_id: String(signal.signalId || ""),
+      signal_id: String(signal.signalId || generatedSignalId(signal)),
       signal_date: signal.date || new Date().toISOString().slice(0, 10),
       geography: signal.geography || "Global",
       pestec_class: signal.pestecClass || "Technological",
@@ -75,8 +89,35 @@
       innovation_impact: signal.innovationImpact || "",
       source: signal.source || "",
       evidence_type: signal.evidenceType || "Analyst input",
-      origin: signal.origin || "database"
+      origin: signal.origin || "database",
+      is_archived: false,
+      updated_at: new Date().toISOString()
     };
+  }
+
+  function publishSignals(signals) {
+    const current = asArray(signals);
+    window.__AIHORIZON_LIVE_SIGNALS = current;
+    try {
+      localStorage.setItem(signalCacheKey, JSON.stringify(current));
+      localStorage.removeItem(signalCacheKey + ".localEdits");
+    } catch (error) {}
+    try {
+      window.dispatchEvent(new CustomEvent("aihorizon:signals-updated", {
+        detail: { count: current.length }
+      }));
+    } catch (error) {}
+    return current;
+  }
+
+  async function loadSignals() {
+    const result = await state.client
+      .from("signals")
+      .select("*")
+      .eq("is_archived", false)
+      .order("signal_date", { ascending: false });
+    if (result.error) throw result.error;
+    return publishSignals(asArray(result.data).map(toSignal));
   }
 
   async function ensureAnonymousSession() {
@@ -100,6 +141,7 @@
     state,
     client: state.client,
     ensureAnonymousSession,
+    loadSignals,
     async getWorkshop(slug) {
       if (!state.client) return null;
       let result = await state.client
@@ -186,14 +228,7 @@
     const method = String(options.method || (input && input.method) || "GET").toUpperCase();
     try {
       if (method === "GET" && pathname === "/api/signals") {
-        const result = await state.client
-          .from("signals")
-          .select("*")
-          .eq("is_archived", false)
-          .order("signal_date", { ascending: false });
-        if (result.error) throw result.error;
-        if (!result.data || result.data.length === 0) return fallbackFetch(input, options);
-        return jsonResponse({ signals: result.data.map(toSignal) });
+        return jsonResponse({ signals: await loadSignals() });
       }
 
       let body = {};
@@ -201,12 +236,14 @@
       if (method === "POST" && pathname === "/api/signals") {
         const result = await state.client.from("signals").insert(fromSignal(body)).select().single();
         if (result.error) throw result.error;
+        await loadSignals();
         return jsonResponse({ signal: toSignal(result.data) }, 201);
       }
       if (method === "POST" && pathname === "/api/signals/bulk") {
         const incoming = Array.isArray(body) ? body : body.signals;
         const result = await state.client.from("signals").upsert(asArray(incoming).map(fromSignal), { onConflict: "signal_id" }).select();
         if (result.error) throw result.error;
+        await loadSignals();
         return jsonResponse({ signals: result.data.map(toSignal) }, 201);
       }
       const match = pathname.match(/^\/api\/signals\/([^/]+)$/);
@@ -219,6 +256,7 @@
           .select()
           .single();
         if (result.error) throw result.error;
+        await loadSignals();
         return jsonResponse({ signal: toSignal(result.data) });
       }
       return fallbackFetch(input, options);
