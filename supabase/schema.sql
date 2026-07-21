@@ -32,6 +32,7 @@ create table if not exists public.workshops (
   slug text not null unique check (slug ~ '^[a-z0-9][a-z0-9-]{2,48}$'),
   title text not null,
   status text not null default 'draft' check (status in ('draft', 'open', 'closed')),
+  ratings_version integer not null default 0 check (ratings_version >= 0),
   opens_at timestamptz,
   closes_at timestamptz,
   created_by uuid references auth.users(id),
@@ -49,6 +50,7 @@ create table if not exists public.ratings (
   workshop_id uuid not null references public.workshops(id) on delete cascade,
   signal_id text not null references public.signals(signal_id) on delete cascade,
   participant_id uuid not null references auth.users(id) on delete cascade,
+  workshop_version integer not null default 0 check (workshop_version >= 0),
   impact text check (impact in ('Low', 'Medium', 'High')),
   uncertainty text check (uncertainty in ('Low', 'Medium', 'High')),
   recommended_response text check (recommended_response in ('Watch', 'Prepare', 'Act')),
@@ -129,6 +131,7 @@ create policy "Participants rate open workshops"
     and exists (
       select 1 from public.workshops w
       where w.id = workshop_id and w.status = 'open'
+        and w.ratings_version = workshop_version
         and (w.opens_at is null or w.opens_at <= now())
         and (w.closes_at is null or w.closes_at >= now())
     )
@@ -140,7 +143,12 @@ create policy "Participants update their own ratings"
   using (participant_id = auth.uid())
   with check (
     participant_id = auth.uid()
-    and exists (select 1 from public.workshops w where w.id = workshop_id and w.status = 'open')
+    and exists (
+      select 1 from public.workshops w
+      where w.id = workshop_id
+        and w.status = 'open'
+        and w.ratings_version = workshop_version
+    )
   );
 
 create policy "Participants delete their own ratings"
@@ -177,12 +185,56 @@ as $$
     count(*) filter (where r.important) as important_count
   from public.ratings r
   join public.workshops w on w.id = r.workshop_id
-  where w.slug = p_workshop_slug and w.status in ('open', 'closed')
+  where w.slug = p_workshop_slug
+    and w.status in ('open', 'closed')
+    and r.workshop_version = w.ratings_version
   group by r.signal_id;
 $$;
 
 revoke all on function public.get_workshop_aggregates(text) from public;
 grant execute on function public.get_workshop_aggregates(text) to anon, authenticated;
+
+-- Editors can clear the current assessment round for one workshop. Incrementing
+-- ratings_version tells participant browsers to discard the matching local
+-- assessments and prevents stale browser state from reappearing in aggregates.
+create or replace function public.clear_workshop_ratings(p_workshop_slug text)
+returns table (deleted_count bigint, ratings_version integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_workshop_id uuid;
+  removed bigint;
+  next_version integer;
+begin
+  if not public.is_editor() then
+    raise exception 'Editor access is required.' using errcode = '42501';
+  end if;
+
+  select id into target_workshop_id
+  from public.workshops
+  where slug = p_workshop_slug;
+
+  if target_workshop_id is null then
+    raise exception 'Workshop % was not found.', p_workshop_slug using errcode = 'P0002';
+  end if;
+
+  delete from public.ratings where workshop_id = target_workshop_id;
+  get diagnostics removed = row_count;
+
+  update public.workshops as w
+  set ratings_version = w.ratings_version + 1,
+      updated_at = now()
+  where w.id = target_workshop_id
+  returning w.ratings_version into next_version;
+
+  return query select removed, next_version;
+end;
+$$;
+
+revoke all on function public.clear_workshop_ratings(text) from public;
+grant execute on function public.clear_workshop_ratings(text) to authenticated;
 
 -- Initial workshop used by config.example.js.
 insert into public.workshops (slug, title, status)
