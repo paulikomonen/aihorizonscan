@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Editor sign-in · AI Horizon Radar</title>
+    <meta name="robots" content="noindex" />
+    <style>
+      :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color:#180061; background:#f7f6fb; }
+      * { box-sizing:border-box; }
+      body { min-height:100vh; margin:0; display:grid; place-items:center; padding:24px; }
+      main { width:min(460px,100%); padding:28px; border:1px solid rgba(24,0,97,.14); border-radius:18px; background:white; box-shadow:0 24px 60px rgba(24,0,97,.1); }
+      .eyebrow { color:rgba(24,0,97,.62); font-size:11px; font-weight:750; letter-spacing:.14em; text-transform:uppercase; }
+      h1 { margin:8px 0 0; font-size:24px; line-height:1.2; }
+      p { margin:10px 0 0; color:rgba(24,0,97,.7); font-size:14px; line-height:1.55; }
+      .status { display:flex; align-items:center; gap:10px; margin-top:20px; padding:12px; border-radius:12px; background:rgba(24,0,97,.045); }
+      .dot { width:9px; height:9px; flex:0 0 auto; border-radius:50%; background:#2a9d62; box-shadow:0 0 0 5px rgba(42,157,98,.12); animation:pulse 1.4s ease-in-out infinite; }
+      .error .dot { background:#d94a55; box-shadow:0 0 0 5px rgba(217,74,85,.12); animation:none; }
+      a { color:#180061; font-weight:700; }
+      @keyframes pulse { 50% { opacity:.45; } }
+    </style>
+    <script src="./config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body>
+    <main>
+      <div class="eyebrow">Secure editor access</div>
+      <h1>Completing sign-in</h1>
+      <p>The magic link has returned to the AI Horizon Radar. This page verifies editor access before opening the Update tracker.</p>
+      <div class="status" id="status" role="status" aria-live="polite">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="status-text">Checking the sign-in link…</span>
+      </div>
+      <p id="return-link" hidden><a href="./#/update">Return to the Update tracker</a></p>
+    </main>
+
+    <script>
+      (function () {
+        "use strict";
+        const status = document.getElementById("status");
+        const statusText = document.getElementById("status-text");
+        const returnLink = document.getElementById("return-link");
+        const config = window.AIHORIZON_CONFIG || {};
+        let finished = false;
+
+        function showError(message) {
+          if (finished) return;
+          finished = true;
+          status.classList.add("error");
+          statusText.textContent = message;
+          returnLink.hidden = false;
+        }
+
+        function openUpdateTracker() {
+          const destination = new URL("./", window.location.href);
+          destination.hash = "#/update";
+          window.location.replace(destination.href);
+        }
+
+        async function verifyEditor(session) {
+          if (finished || !session || !session.user || session.user.is_anonymous) return;
+          finished = true;
+          statusText.textContent = "Verifying editor access…";
+          try {
+            const access = await client.rpc("is_editor");
+            if (access.error) throw access.error;
+            if (access.data !== true) {
+              finished = false;
+              showError("This email address is signed in but is not on the editor allow-list.");
+              return;
+            }
+            try { sessionStorage.setItem("__aihorizon_admin_unlocked_v1", "unlocked"); } catch (error) {}
+            statusText.textContent = "Access confirmed. Opening the Update tracker…";
+            setTimeout(openUpdateTracker, 250);
+          } catch (error) {
+            finished = false;
+            showError(error.message || "Editor access could not be verified.");
+          }
+        }
+
+        const hashParams = new URLSearchParams((window.location.hash || "").replace(/^#/, ""));
+        const authError = hashParams.get("error_description") || hashParams.get("error");
+        if (authError) {
+          showError(authError.replace(/\+/g, " "));
+          return;
+        }
+        if (!window.supabase || !window.supabase.createClient || !config.supabaseUrl || !config.supabasePublishableKey) {
+          showError("Supabase is not configured on this deployment.");
+          return;
+        }
+
+        const client = window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey, {
+          auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+        });
+
+        client.auth.onAuthStateChange(function (_event, session) {
+          if (session && session.user && !session.user.is_anonymous) {
+            // Run API work outside the auth callback to avoid blocking the
+            // auth client's internal state transition.
+            setTimeout(function () { verifyEditor(session); }, 0);
+          }
+        });
+        client.auth.getSession().then(function (result) {
+          if (result.error) throw result.error;
+          if (result.data.session) verifyEditor(result.data.session);
+        }).catch(function (error) {
+          showError(error.message || "The sign-in session could not be created.");
+        });
+
+        setTimeout(function () {
+          if (!finished) showError("The sign-in link could not be completed. It may have expired or already been used.");
+        }, 12000);
+      })();
+    </script>
+  </body>
+</html>
