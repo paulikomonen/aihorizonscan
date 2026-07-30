@@ -99,6 +99,51 @@ $$;
 revoke all on function public.is_editor() from public;
 grant execute on function public.is_editor() to authenticated;
 
+create or replace function public.set_qualitative_synthesis(p_content text)
+returns table (content text, updated_at timestamptz)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  cleaned_content text := trim(coalesce(p_content, ''));
+begin
+  if not public.is_editor() then
+    raise exception 'Editor access is required.' using errcode = '42501';
+  end if;
+
+  if char_length(cleaned_content) < 20 or char_length(cleaned_content) > 5000 then
+    raise exception 'The qualitative synthesis must contain 20–5000 characters.'
+      using errcode = '22023';
+  end if;
+
+  insert into public.dashboard_content (
+    content_key,
+    content,
+    updated_at,
+    updated_by
+  )
+  values (
+    'qualitative_synthesis',
+    cleaned_content,
+    now(),
+    auth.uid()
+  )
+  on conflict (content_key) do update
+  set content = excluded.content,
+      updated_at = excluded.updated_at,
+      updated_by = excluded.updated_by;
+
+  return query
+    select dc.content, dc.updated_at
+    from public.dashboard_content dc
+    where dc.content_key = 'qualitative_synthesis';
+end;
+$$;
+
+revoke all on function public.set_qualitative_synthesis(text) from public;
+grant execute on function public.set_qualitative_synthesis(text) to authenticated;
+
 -- Anyone may read active signals. Only permanent authenticated users may edit.
 create policy "Active signals are publicly readable"
   on public.signals for select
