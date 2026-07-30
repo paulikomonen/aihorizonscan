@@ -1051,7 +1051,11 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
     const stages = countBy(signals, x => splitMulti(x.innovationStages || x['Innovation stage'])).slice(0,3);
     const signature = JSON.stringify({ total: s.total, latest: s.latest, direction: s.direction.slice(0,6), domains, stages });
     const existing = document.getElementById('dashboard-executive-panel');
-    if (existing && existing.getAttribute('data-signal-signature') === signature) return;
+    const existingSignature = existing && (
+      existing.getAttribute('data-signal-signature')
+      || existing.querySelector('[data-signal-signature]')?.getAttribute('data-signal-signature')
+    );
+    if (existing && existingSignature === signature) return;
     if (existing) existing.remove();
     insertAfter(afterHeader(heading), `
       <section class="foresight-panel foresight-panel-muted" aria-label="Executive signal summary" data-signal-signature="${esc(signature)}">
@@ -1074,6 +1078,10 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
           <div class="foresight-card"><strong>Suggested next step</strong><p class="foresight-body" style="margin-top:8px;">Open the Signal Radar to find clusters, then use Innovation implications to translate the most relevant signals into opportunity spaces and experiments.</p></div>
         </div>
       </section>`, 'dashboard-executive-panel');
+    const inserted = document.getElementById('dashboard-executive-panel');
+    if (inserted) inserted.setAttribute('data-signal-signature', signature);
+    window.__AIHORIZON_DASHBOARD_READY = true;
+    window.dispatchEvent(new CustomEvent('aihorizon:dashboard-ready'));
   }
 
   function radar() {
@@ -1606,7 +1614,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
 
 
 <script src="./assets/js/editor-auth.js?v=20260730-1"></script>
-<script src="./assets/js/qualitative-synthesis.js?v=20260730-4"></script>
+<script src="./assets/js/qualitative-synthesis.js?v=20260730-5"></script>
 <script src="./assets/js/excel-import.js?v=20260721-1"></script>
 <script src="./assets/js/assessment-admin.js"></script>
 <script src="./assets/js/radar-visual-fixes.js?v=20260730-2"></script>
