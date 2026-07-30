@@ -6,6 +6,7 @@
   const MAX_LENGTH = 5000;
   let cachedRecord = null;
   let loadAttempted = false;
+  let lastLoadError = null;
   let loading = false;
   let editorCheckPending = false;
   let renderTimer = null;
@@ -41,6 +42,17 @@
     });
   }
 
+  function helpfulError(error) {
+    const message = String(error && error.message ? error.message : error || "");
+    if (/dashboard_content|set_qualitative_synthesis|schema cache|PGRST20[245]/i.test(message)) {
+      return "Supabase dashboard content is not ready. Re-run supabase/dashboard-content-migration.sql in the Supabase SQL Editor, then reload this page.";
+    }
+    if (/row-level security|permission denied|42501/i.test(message)) {
+      return "Supabase rejected the update. Confirm that you are signed in with an approved editor account, then re-run the dashboard content migration.";
+    }
+    return message || "The synthesis could not be saved.";
+  }
+
   function ensureStyles() {
     if (document.getElementById("aih-synthesis-styles")) return;
     const style = document.createElement("style");
@@ -67,11 +79,13 @@
     loading = true;
     try {
       cachedRecord = await backend.getQualitativeSynthesis();
+      lastLoadError = null;
       loadAttempted = true;
       return cachedRecord;
     } catch (error) {
       // Until the migration has been run, the existing static synthesis remains
       // visible and Update Tracker explains what is missing.
+      lastLoadError = error;
       loadAttempted = true;
       console.warn("Qualitative synthesis could not be loaded", error);
       return null;
@@ -159,7 +173,9 @@
       const record = await loadRecord(force);
       textarea.value = record && record.content ? record.content : DEFAULT_SYNTHESIS;
       meta.textContent = record && record.updated_at ? "Last saved " + formattedDate(record.updated_at) : "Using the built-in default until the first save.";
-      status.textContent = record ? "" : "If saving fails, run the dashboard content migration in Supabase first.";
+      status.textContent = record ? "" : lastLoadError
+        ? helpfulError(lastLoadError)
+        : "No saved synthesis was found. Save this draft to publish it.";
       updateCounter(panel);
     }
 
@@ -197,7 +213,7 @@
         status.textContent = "Saved. The Dashboard now shows this synthesis.";
         updateCounter(panel);
       } catch (error) {
-        status.textContent = error.message || "The synthesis could not be saved.";
+        status.textContent = helpfulError(error);
       } finally {
         saveButton.disabled = false;
         saveButton.textContent = "Save to Dashboard";
