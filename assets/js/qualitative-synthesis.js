@@ -7,9 +7,10 @@
   let cachedRecord = null;
   let loadAttempted = false;
   let lastLoadError = null;
-  let loading = false;
+  let loadingPromise = null;
   let editorCheckPending = false;
   let renderTimer = null;
+  let refreshDashboardOnNextRender = true;
 
   function onDashboard() {
     return (window.location.hash || "").includes("/dashboard");
@@ -81,32 +82,32 @@
   async function loadRecord(force) {
     if (!backend || !backend.state.configured || !backend.getQualitativeSynthesis) return null;
     if (loadAttempted && !force) return cachedRecord;
-    if (loading) return cachedRecord;
-    loading = true;
-    try {
-      cachedRecord = await backend.getQualitativeSynthesis();
-      lastLoadError = null;
-      loadAttempted = true;
-      return cachedRecord;
-    } catch (error) {
-      // Until the migration has been run, the existing static synthesis remains
-      // visible and Update Tracker explains what is missing.
-      lastLoadError = error;
-      loadAttempted = true;
-      console.warn("Qualitative synthesis could not be loaded", error);
-      return null;
-    } finally {
-      loading = false;
-    }
+    if (loadingPromise) return loadingPromise;
+    loadingPromise = (async function () {
+      try {
+        cachedRecord = await backend.getQualitativeSynthesis();
+        lastLoadError = null;
+        loadAttempted = true;
+        return cachedRecord;
+      } catch (error) {
+        // Until the migration has been run, the existing static synthesis remains
+        // visible and Update Tracker explains what is missing.
+        lastLoadError = error;
+        loadAttempted = true;
+        console.warn("Qualitative synthesis could not be loaded", error);
+        return null;
+      } finally {
+        loadingPromise = null;
+      }
+    })();
+    return loadingPromise;
   }
 
-  async function renderDashboard() {
-    if (!onDashboard()) return;
+  function applyDashboardRecord(record) {
+    if (!onDashboard() || !record || !record.content) return false;
     const target = document.querySelector(".foresight-synthesis-text");
-    if (!target) return;
+    if (!target) return false;
     ensureStyles();
-    const record = await loadRecord(false);
-    if (!record || !record.content) return;
     const nextContent = renderContent(record.content);
     if (target.textContent !== nextContent) target.textContent = nextContent;
     const card = target.closest(".foresight-synthesis-card") || target.parentElement;
@@ -120,6 +121,15 @@
       const nextMeta = record.updated_at ? "Editorial synthesis updated " + formattedDate(record.updated_at) : "";
       if (meta.textContent !== nextMeta) meta.textContent = nextMeta;
     }
+    return true;
+  }
+
+  async function renderDashboard(force) {
+    if (!onDashboard()) return false;
+    const target = document.querySelector(".foresight-synthesis-text");
+    if (!target) return false;
+    const record = await loadRecord(Boolean(force));
+    return applyDashboardRecord(record);
   }
 
   async function approvedEditor() {
@@ -233,18 +243,38 @@
   function scheduleRender() {
     clearTimeout(renderTimer);
     renderTimer = setTimeout(function () {
-      renderDashboard();
+      const forceRefresh = refreshDashboardOnNextRender && onDashboard();
+      renderDashboard(forceRefresh).then(function (rendered) {
+        if (forceRefresh && rendered) refreshDashboardOnNextRender = false;
+      });
       renderEditor();
     }, 80);
   }
 
-  window.addEventListener("hashchange", scheduleRender);
+  window.addEventListener("hashchange", function () {
+    if (onDashboard()) refreshDashboardOnNextRender = true;
+    scheduleRender();
+  });
+  window.addEventListener("focus", function () {
+    if (!onDashboard()) return;
+    refreshDashboardOnNextRender = true;
+    scheduleRender();
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState !== "visible" || !onDashboard()) return;
+    refreshDashboardOnNextRender = true;
+    scheduleRender();
+  });
   window.addEventListener("aihorizon:signals-updated", function () {
-    if (onDashboard()) renderDashboard();
+    if (onDashboard()) renderDashboard(false);
   });
   window.addEventListener("aihorizon:synthesis-updated", function (event) {
-    if (event.detail) cachedRecord = event.detail;
-    if (onDashboard()) renderDashboard();
+    if (event.detail) {
+      cachedRecord = event.detail;
+      loadAttempted = true;
+      lastLoadError = null;
+    }
+    if (onDashboard()) applyDashboardRecord(cachedRecord);
   });
   new MutationObserver(scheduleRender).observe(document.documentElement, { childList: true, subtree: true });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", scheduleRender);
