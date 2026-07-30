@@ -45,6 +45,16 @@ create table if not exists public.editor_accounts (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.dashboard_content (
+  content_key text primary key,
+  content text not null check (char_length(trim(content)) between 20 and 5000),
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id),
+  constraint dashboard_content_known_key check (
+    content_key in ('qualitative_synthesis')
+  )
+);
+
 create table if not exists public.ratings (
   id uuid primary key default gen_random_uuid(),
   workshop_id uuid not null references public.workshops(id) on delete cascade,
@@ -69,6 +79,7 @@ alter table public.signals enable row level security;
 alter table public.workshops enable row level security;
 alter table public.ratings enable row level security;
 alter table public.editor_accounts enable row level security;
+alter table public.dashboard_content enable row level security;
 
 create or replace function public.is_editor()
 returns boolean
@@ -109,6 +120,22 @@ create policy "Permanent users can create signals"
 
 create policy "Permanent users can update signals"
   on public.signals for update
+  to authenticated
+  using ((select public.is_editor()))
+  with check ((select public.is_editor()));
+
+create policy "Dashboard content is publicly readable"
+  on public.dashboard_content for select
+  to anon, authenticated
+  using (true);
+
+create policy "Editors can create dashboard content"
+  on public.dashboard_content for insert
+  to authenticated
+  with check ((select public.is_editor()));
+
+create policy "Editors can update dashboard content"
+  on public.dashboard_content for update
   to authenticated
   using ((select public.is_editor()))
   with check ((select public.is_editor()));
@@ -248,3 +275,10 @@ grant execute on function public.clear_workshop_ratings(text) to authenticated;
 insert into public.workshops (slug, title, status)
 values ('prototype', 'Prototype workshop', 'open')
 on conflict (slug) do nothing;
+
+insert into public.dashboard_content (content_key, content)
+values (
+  'qualitative_synthesis',
+  'Across the current {{signal_count}}-signal set, AI is shifting from a tool-centric productivity story to a system-level innovation management challenge: value increasingly depends on redesigned workflows, AI-ready data, assurance gates, regulatory and procurement evidence, and the ability to govern agents, open models and multimodal systems across the full innovation process. The landscape is broadly distributed across PESTEC categories, showing that technological progress is tightly coupled with political compliance and sovereignty, economic compute concentration and operating-model redesign, environmental energy and water constraints, social skills and trust dynamics, and cultural questions of authenticity, disclosure and IP. Innovation teams need a dual posture: act now on governance, workflow redesign, cyber/content risks and infrastructure constraints; prepare capabilities for evaluation, data quality, skills, licensing and responsible scaling; and watch further-horizon discontinuities and wild cards such as deceptive agents and embodied-AI standardisation.'
+)
+on conflict (content_key) do nothing;
