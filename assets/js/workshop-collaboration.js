@@ -128,6 +128,17 @@
     }).slice(0, 4).map(function (item) {
       return '<li><strong>' + esc(item.signal_id) + '</strong> · ' + esc(titles.get(item.signal_id) || item.signal_id) + '</li>';
     }).join("");
+    const scenarioDriverList = scenarioDrivers.slice().sort(function (a, b) {
+      const scoreDifference = (Number(b.avg_impact || 0) + Number(b.avg_uncertainty || 0))
+        - (Number(a.avg_impact || 0) + Number(a.avg_uncertainty || 0));
+      return scoreDifference || Number(b.rating_count || 0) - Number(a.rating_count || 0);
+    }).map(function (item) {
+      return '<li><strong>' + esc(item.signal_id) + '</strong> · '
+        + esc(titles.get(item.signal_id) || item.signal_id)
+        + '<span class="sr-collab-driver-scores">Impact ' + Number(item.avg_impact || 0).toFixed(1)
+        + ' · Uncertainty ' + Number(item.avg_uncertainty || 0).toFixed(1)
+        + ' · n=' + Number(item.rating_count || 0) + '</span></li>';
+    }).join("");
 
     return `
       <div class="foresight-kicker">Workshop group snapshot</div>
@@ -136,7 +147,17 @@
         <div class="foresight-card"><div class="foresight-kicker">Group priorities</div><div class="foresight-stat" style="font-size:24px;">${priorities.length}</div><div class="foresight-body">high-impact signals leaning Prepare or Act</div></div>
         <div class="foresight-card"><div class="foresight-kicker">Scenario drivers</div><div class="foresight-stat" style="font-size:24px;">${scenarioDrivers.length}</div><div class="foresight-body">high mean impact and uncertainty</div></div>
       </div>
-      ${priorityList ? '<ul class="sr-mvp-summary-list">' + priorityList + '</ul>' : '<div class="sr-collab-empty">Group priorities will appear after participants submit ratings.</div>'}
+      <div class="sr-collab-driver-key"><span aria-hidden="true"></span>Violet rings mark scenario drivers: mean impact and uncertainty are both at least 2.5 on the 1–3 scale.</div>
+      <div class="sr-collab-summary-columns">
+        <div>
+          <div class="sr-mvp-label">Scenario drivers</div>
+          ${scenarioDriverList ? '<ul class="sr-mvp-summary-list sr-collab-driver-list">' + scenarioDriverList + '</ul>' : '<div class="sr-collab-empty">Scenario drivers will appear when a group-rated signal crosses both thresholds.</div>'}
+        </div>
+        <div>
+          <div class="sr-mvp-label">Leading group priorities</div>
+          ${priorityList ? '<ul class="sr-mvp-summary-list">' + priorityList + '</ul>' : '<div class="sr-collab-empty">Group priorities will appear after participants submit ratings.</div>'}
+        </div>
+      </div>
     `;
   }
 
@@ -155,8 +176,15 @@
       .sr-collab-distribution,.sr-collab-empty{font-size:11px;color:rgba(24,0,97,.64);margin-top:8px}
       .sr-collab-group-ring{fill:none;stroke:#2a9d62;stroke-width:2.5;stroke-dasharray:3 2;opacity:.9;pointer-events:none}
       [data-testid^="radar-dot-"].sr-collab-group-rated{filter:drop-shadow(0 0 3px rgba(42,157,98,.28))}
-      .dark .sr-collab-banner,.dark .sr-collab-snapshot,.dark .sr-collab-group,.dark .sr-collab-metrics div{background:hsl(var(--card)/.88);border-color:hsl(var(--border));color:hsl(var(--foreground))}.dark .sr-collab-metrics strong{color:hsl(var(--foreground))}.dark .sr-collab-metrics span,.dark .sr-collab-distribution,.dark .sr-collab-empty{color:hsl(var(--muted-foreground))}
-      @media(max-width:700px){.sr-collab-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      [data-testid^="radar-dot-"].sr-collab-scenario-driver{filter:drop-shadow(0 0 5px rgba(124,58,237,.5))}
+      [data-testid^="radar-dot-"].sr-collab-scenario-driver .sr-collab-group-ring{stroke:#7c3aed;stroke-width:4;stroke-dasharray:none;opacity:1}
+      .sr-collab-driver-key{display:flex;align-items:center;gap:8px;margin-top:13px;font-size:11px;line-height:1.45;color:rgba(24,0,97,.68)}
+      .sr-collab-driver-key span{width:11px;height:11px;flex:0 0 11px;border:3px solid #7c3aed;border-radius:50%;box-shadow:0 0 0 2px rgba(124,58,237,.11)}
+      .sr-collab-summary-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:14px}
+      .sr-collab-driver-list li:before{color:#7c3aed}
+      .sr-collab-driver-scores{display:block;margin-top:2px;font-size:10px;color:rgba(24,0,97,.58)}
+      .dark .sr-collab-banner,.dark .sr-collab-snapshot,.dark .sr-collab-group,.dark .sr-collab-metrics div{background:hsl(var(--card)/.88);border-color:hsl(var(--border));color:hsl(var(--foreground))}.dark .sr-collab-metrics strong{color:hsl(var(--foreground))}.dark .sr-collab-metrics span,.dark .sr-collab-distribution,.dark .sr-collab-empty,.dark .sr-collab-driver-key,.dark .sr-collab-driver-scores{color:hsl(var(--muted-foreground))}
+      @media(max-width:700px){.sr-collab-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.sr-collab-summary-columns{grid-template-columns:1fr}}
     `;
     document.head.appendChild(style);
   }
@@ -166,7 +194,13 @@
       const id = dot.getAttribute("data-testid").replace(/^radar-dot-/, "");
       const item = aggregates.get(id);
       const hasGroupRating = Boolean(item && Number(item.rating_count));
+      const isScenarioDriver = Boolean(
+        hasGroupRating
+        && Number(item.avg_impact || 0) >= 2.5
+        && Number(item.avg_uncertainty || 0) >= 2.5
+      );
       dot.classList.toggle("sr-collab-group-rated", hasGroupRating);
+      dot.classList.toggle("sr-collab-scenario-driver", isScenarioDriver);
       let ring = dot.querySelector(".sr-collab-group-ring");
       if (!hasGroupRating) {
         if (ring) ring.remove();

@@ -16,12 +16,12 @@
     style.id = "aih-radar-visual-styles";
     style.textContent = `
       [data-testid="signal-radar"] .aih-radar-sector-label{
-        font-size:11px!important;
+        font-size:10.5px!important;
         font-weight:750!important;
-        letter-spacing:.055em!important;
+        letter-spacing:.045em!important;
         paint-order:stroke fill;
         stroke:hsl(var(--card));
-        stroke-width:7px;
+        stroke-width:6px;
         stroke-linejoin:round;
       }
       [data-testid^="radar-dot-"]>text{
@@ -41,6 +41,23 @@
     });
   }
 
+  function addHorizontalLabelSpace(svg) {
+    if (svg.dataset.aihExpandedViewBox === "true") return;
+    const viewBox = svg.viewBox && svg.viewBox.baseVal;
+    if (!viewBox || !viewBox.width) return;
+    const horizontalPadding = 34;
+    svg.setAttribute(
+      "viewBox",
+      [
+        viewBox.x - horizontalPadding,
+        viewBox.y,
+        viewBox.width + horizontalPadding * 2,
+        viewBox.height
+      ].join(" ")
+    );
+    svg.dataset.aihExpandedViewBox = "true";
+  }
+
   function moveSectorLabels(svg, center, outerRadius) {
     Array.from(svg.querySelectorAll(":scope > text")).forEach(function (label) {
       const name = String(label.textContent || "").trim().toUpperCase();
@@ -48,9 +65,11 @@
       const oldX = numberAttribute(label, "x");
       const oldY = numberAttribute(label, "y");
       const angle = Math.atan2(oldY - center, oldX - center);
-      const labelRadius = outerRadius + 34;
+      const isHorizontalEdge = name === "ECONOMIC" || name === "ENVIRONMENTAL";
+      const labelRadius = outerRadius + (isHorizontalEdge ? 28 : 30);
       label.setAttribute("x", String(center + labelRadius * Math.cos(angle)));
       label.setAttribute("y", String(center + labelRadius * Math.sin(angle)));
+      label.setAttribute("text-anchor", "middle");
       label.classList.add("aih-radar-sector-label");
     });
   }
@@ -136,6 +155,7 @@
     const svg = document.querySelector('[data-testid="signal-radar"]');
     if (!svg) return;
     ensureStyles();
+    addHorizontalLabelSpace(svg);
     const viewBox = svg.viewBox && svg.viewBox.baseVal;
     const center = viewBox && viewBox.width ? viewBox.x + viewBox.width / 2 : 430;
     const directCircles = Array.from(svg.children).filter(function (child) {
