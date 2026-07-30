@@ -99,8 +99,10 @@ $$;
 revoke all on function public.is_editor() from public;
 grant execute on function public.is_editor() to authenticated;
 
-create or replace function public.set_qualitative_synthesis(p_content text)
-returns table (content text, updated_at timestamptz)
+drop function if exists public.set_qualitative_synthesis(text);
+
+create function public.set_qualitative_synthesis(p_content text)
+returns jsonb
 language plpgsql
 security definer
 set search_path = public
@@ -134,10 +136,14 @@ begin
       updated_at = excluded.updated_at,
       updated_by = excluded.updated_by;
 
-  return query
-    select dc.content, dc.updated_at
+  return (
+    select jsonb_build_object(
+      'content', dc.content,
+      'updated_at', dc.updated_at
+    )
     from public.dashboard_content dc
-    where dc.content_key = 'qualitative_synthesis';
+    where dc.content_key = 'qualitative_synthesis'
+  );
 end;
 $$;
 
