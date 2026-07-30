@@ -225,23 +225,50 @@
     },
     async saveQualitativeSynthesis(content) {
       if (!state.client) throw new Error("Supabase is not configured.");
-      const sessionResult = await state.client.auth.getSession();
+      let sessionResult = await state.client.auth.getSession();
       if (sessionResult.error) throw sessionResult.error;
-      const session = sessionResult.data && sessionResult.data.session;
+      let session = sessionResult.data && sessionResult.data.session;
+      if (session && session.expires_at && Number(session.expires_at) <= Math.floor(Date.now() / 1000) + 60) {
+        sessionResult = await state.client.auth.refreshSession();
+        if (sessionResult.error) throw sessionResult.error;
+        session = sessionResult.data && sessionResult.data.session;
+      }
       if (!session || !session.user || session.user.is_anonymous) {
         throw new Error("Your editor session is missing or has expired. Sign out, sign in again and retry.");
       }
-      const access = await state.client.rpc("is_editor");
-      if (access.error) throw access.error;
-      if (access.data !== true) {
-        throw new Error("The signed-in account is not approved to update Dashboard content.");
-      }
       const cleaned = String(content || "").trim();
-      const result = await state.client.rpc("set_qualitative_synthesis", {
-        p_content: cleaned
+      const restBase = config.supabaseUrl.replace(/\/$/, "") + "/rest/v1";
+      const headers = {
+        "Content-Type": "application/json",
+        "apikey": config.supabasePublishableKey,
+        "Authorization": "Bearer " + session.access_token,
+        "Prefer": "return=representation"
+      };
+      let response = await window.fetch(restBase + "/dashboard_content?content_key=eq.qualitative_synthesis", {
+        method: "PATCH",
+        headers: headers,
+        body: JSON.stringify({
+          content: cleaned,
+          updated_at: new Date().toISOString(),
+          updated_by: session.user.id
+        })
       });
-      if (result.error) throw result.error;
-      const saved = Array.isArray(result.data) ? result.data[0] : result.data;
+      let payload = await response.json().catch(function () { return {}; });
+
+      // The seeded row should always exist. Keep the RPC as a fallback for an
+      // older or partially migrated database where it does not.
+      if (!response.ok || (Array.isArray(payload) && !payload.length)) {
+        response = await window.fetch(restBase + "/rpc/set_qualitative_synthesis", {
+          method: "POST",
+          headers: headers,
+          body: JSON.stringify({ p_content: cleaned })
+        });
+        payload = await response.json().catch(function () { return {}; });
+      }
+      if (!response.ok) {
+        throw new Error(payload.message || "Supabase rejected the synthesis update (" + response.status + ").");
+      }
+      const saved = Array.isArray(payload) ? payload[0] : payload;
       if (!saved) throw new Error("Supabase did not return the saved synthesis.");
       const verified = await backend.getQualitativeSynthesis();
       if (!verified || verified.content !== cleaned) {

@@ -31,6 +31,8 @@
         font-size:8.5px!important;
       }
       [data-testid^="radar-dot-"]:hover>text{font-weight:750!important;}
+      #signal-radar-collaboration-panel,
+      #signal-radar-mvp-panel{overflow-anchor:none;}
     `;
     document.head.appendChild(style);
   }
@@ -173,9 +175,21 @@
     timer = setTimeout(improveRadar, 70);
   }
 
+  function preserveViewportOnButtonClick(event) {
+    if (!(window.location.hash || "").includes("/radar")) return;
+    if (!event.target.closest || !event.target.closest("button")) return;
+    const left = window.scrollX;
+    const top = window.scrollY;
+    requestAnimationFrame(function () {
+      window.scrollTo(left, top);
+      requestAnimationFrame(function () { window.scrollTo(left, top); });
+    });
+  }
+
   window.addEventListener("hashchange", schedule);
   window.addEventListener("resize", schedule);
   document.addEventListener("DOMContentLoaded", schedule);
+  document.addEventListener("click", preserveViewportOnButtonClick, true);
   new MutationObserver(function () {
     if ((window.location.hash || "").includes("/radar")) schedule();
   }).observe(document.documentElement, { childList: true, subtree: true });

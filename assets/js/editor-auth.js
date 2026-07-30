@@ -5,6 +5,8 @@
   const client = backend.client;
   const unlockKey = "__aihorizon_admin_unlocked_v1";
   let processing = false;
+  let verificationRetry = null;
+  let missingSessionRetries = 0;
 
   function onUpdatePage() {
     return (window.location.hash || "").includes("/update");
@@ -15,12 +17,19 @@
   }
 
   async function permanentSession() {
-    const result = await client.auth.getSession();
-    const session = result.data && result.data.session;
+    let result = await client.auth.getSession();
+    if (result.error) throw result.error;
+    let session = result.data && result.data.session;
+    if (session && session.expires_at && Number(session.expires_at) <= Math.floor(Date.now() / 1000) + 60) {
+      result = await client.auth.refreshSession();
+      if (result.error) throw result.error;
+      session = result.data && result.data.session;
+    }
     const user = session && session.user;
     if (!user || user.is_anonymous) return null;
     const access = await client.rpc("is_editor");
-    if (access.error || access.data !== true) return null;
+    if (access.error) throw access.error;
+    if (access.data !== true) return null;
     return session;
   }
 
@@ -54,10 +63,22 @@
 
   async function renderEditorLogin() {
     if (!onUpdatePage() || processing) return;
-    const session = await permanentSession();
+    let session = null;
+    try {
+      session = await permanentSession();
+      clearTimeout(verificationRetry);
+    } catch (error) {
+      // A temporary refresh or network failure must not discard an otherwise
+      // valid editor session or force the user back through the sign-in form.
+      console.warn("Editor session verification will be retried", error);
+      clearTimeout(verificationRetry);
+      verificationRetry = setTimeout(renderEditorLogin, 1500);
+      return;
+    }
     const legacyInput = document.querySelector('[data-testid="input-admin-password"]');
 
     if (session) {
+      missingSessionRetries = 0;
       unlockEditor();
       renderEditorStatus(session);
       if (legacyInput) window.location.reload();
@@ -68,6 +89,12 @@
     let hadUnlock = false;
     try { hadUnlock = sessionStorage.getItem(unlockKey) === "unlocked"; } catch (error) {}
     if (hadUnlock) {
+      if (window.__aihorizon_persisted_editor_session && missingSessionRetries < 4) {
+        missingSessionRetries += 1;
+        clearTimeout(verificationRetry);
+        verificationRetry = setTimeout(renderEditorLogin, 750);
+        return;
+      }
       clearLocalEditorAccess();
       if (!legacyInput) {
         window.location.reload();
@@ -147,6 +174,10 @@
           unlockEditor();
           if (document.querySelector('[data-testid="input-admin-password"]')) window.location.reload();
           else renderEditorStatus(approvedSession);
+        }).catch(function (error) {
+          console.warn("Editor session verification will be retried", error);
+          clearTimeout(verificationRetry);
+          verificationRetry = setTimeout(renderEditorLogin, 1500);
         });
       }, 0);
     }
