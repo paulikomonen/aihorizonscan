@@ -212,6 +212,46 @@
       });
       if (result.error) throw result.error;
       return (result.data && result.data[0]) || { deleted_count: 0, ratings_version: null };
+    },
+    async getQualitativeSynthesis() {
+      if (!state.client) return null;
+      const result = await state.client
+        .from("dashboard_content")
+        .select("content, updated_at")
+        .eq("content_key", "qualitative_synthesis")
+        .maybeSingle();
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    async saveQualitativeSynthesis(content) {
+      if (!state.client) throw new Error("Supabase is not configured.");
+      const access = await state.client.rpc("is_editor");
+      if (access.error) throw access.error;
+      if (access.data !== true) throw new Error("Editor authentication is required to update the synthesis.");
+      const sessionResult = await state.client.auth.getSession();
+      if (sessionResult.error) throw sessionResult.error;
+      const session = sessionResult.data && sessionResult.data.session;
+      if (!session || !session.user || session.user.is_anonymous) {
+        throw new Error("A permanent editor session is required.");
+      }
+      const payload = {
+        content_key: "qualitative_synthesis",
+        content: String(content || "").trim(),
+        updated_at: new Date().toISOString(),
+        updated_by: session.user.id
+      };
+      const result = await state.client
+        .from("dashboard_content")
+        .upsert(payload, { onConflict: "content_key" })
+        .select("content, updated_at")
+        .single();
+      if (result.error) throw result.error;
+      try {
+        window.dispatchEvent(new CustomEvent("aihorizon:synthesis-updated", {
+          detail: result.data
+        }));
+      } catch (error) {}
+      return result.data;
     }
   };
 
