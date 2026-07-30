@@ -2,6 +2,7 @@
   "use strict";
 
   const backend = window.AIHorizonBackend;
+  const config = window.AIHORIZON_CONFIG || {};
   const DEFAULT_SYNTHESIS = "Across the current {{signal_count}}-signal set, AI is shifting from a tool-centric productivity story to a system-level innovation management challenge: value increasingly depends on redesigned workflows, AI-ready data, assurance gates, regulatory and procurement evidence, and the ability to govern agents, open models and multimodal systems across the full innovation process. The landscape is broadly distributed across PESTEC categories, showing that technological progress is tightly coupled with political compliance and sovereignty, economic compute concentration and operating-model redesign, environmental energy and water constraints, social skills and trust dynamics, and cultural questions of authenticity, disclosure and IP. Innovation teams need a dual posture: act now on governance, workflow redesign, cyber/content risks and infrastructure constraints; prepare capabilities for evaluation, data quality, skills, licensing and responsible scaling; and watch further-horizon discontinuities and wild cards such as deceptive agents and embodied-AI standardisation.";
   const MAX_LENGTH = 5000;
   let cachedRecord = null;
@@ -79,13 +80,40 @@
     document.head.appendChild(style);
   }
 
+  async function fetchPublicRecord() {
+    if (!config.supabaseUrl || !config.supabasePublishableKey) {
+      if (!backend || !backend.getQualitativeSynthesis) return null;
+      return backend.getQualitativeSynthesis();
+    }
+    const endpoint = config.supabaseUrl.replace(/\/$/, "")
+      + "/rest/v1/dashboard_content"
+      + "?content_key=eq.qualitative_synthesis&select=content,updated_at";
+    const response = await window.fetch(endpoint, {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        apikey: config.supabasePublishableKey,
+        Authorization: "Bearer " + config.supabasePublishableKey,
+        Accept: "application/json"
+      }
+    });
+    const payload = await response.json().catch(function () { return []; });
+    if (!response.ok) {
+      throw new Error(payload.message || "The published synthesis could not be loaded (" + response.status + ").");
+    }
+    return Array.isArray(payload) ? payload[0] || null : payload;
+  }
+
   async function loadRecord(force) {
-    if (!backend || !backend.state.configured || !backend.getQualitativeSynthesis) return null;
+    const publicReadConfigured = Boolean(config.supabaseUrl && config.supabasePublishableKey);
+    const backendReadConfigured = Boolean(backend && backend.state && backend.state.configured && backend.getQualitativeSynthesis);
+    if (!publicReadConfigured && !backendReadConfigured) return null;
     if (loadAttempted && !force) return cachedRecord;
     if (loadingPromise) return loadingPromise;
     loadingPromise = (async function () {
       try {
-        cachedRecord = await backend.getQualitativeSynthesis();
+        cachedRecord = await fetchPublicRecord();
+        window.__AIHORIZON_SYNTHESIS_RECORD = cachedRecord;
         lastLoadError = null;
         loadAttempted = true;
         return cachedRecord;
@@ -105,7 +133,8 @@
 
   function applyDashboardRecord(record) {
     if (!onDashboard() || !record || !record.content) return false;
-    const target = document.querySelector(".foresight-synthesis-text");
+    const target = document.querySelector("#dashboard-executive-panel .foresight-synthesis-text")
+      || document.querySelector(".foresight-synthesis-text");
     if (!target) return false;
     ensureStyles();
     const nextContent = renderContent(record.content);
@@ -126,7 +155,8 @@
 
   async function renderDashboard(force) {
     if (!onDashboard()) return false;
-    const target = document.querySelector(".foresight-synthesis-text");
+    const target = document.querySelector("#dashboard-executive-panel .foresight-synthesis-text")
+      || document.querySelector(".foresight-synthesis-text");
     if (!target) return false;
     const record = await loadRecord(Boolean(force));
     return applyDashboardRecord(record);
@@ -223,6 +253,7 @@
       status.textContent = "Saving the synthesis to Supabase…";
       try {
         cachedRecord = await backend.saveQualitativeSynthesis(content);
+        window.__AIHORIZON_SYNTHESIS_RECORD = cachedRecord;
         loadAttempted = true;
         lastLoadError = null;
         textarea.value = cachedRecord.content;
@@ -268,14 +299,24 @@
   window.addEventListener("aihorizon:signals-updated", function () {
     if (onDashboard()) renderDashboard(false);
   });
+  window.addEventListener("aihorizon:dashboard-ready", function () {
+    refreshDashboardOnNextRender = false;
+    renderDashboard(true);
+  });
   window.addEventListener("aihorizon:synthesis-updated", function (event) {
     if (event.detail) {
       cachedRecord = event.detail;
+      window.__AIHORIZON_SYNTHESIS_RECORD = event.detail;
       loadAttempted = true;
       lastLoadError = null;
     }
     if (onDashboard()) applyDashboardRecord(cachedRecord);
   });
+  window.AIHorizonSynthesis = {
+    refreshDashboard: function () {
+      return renderDashboard(true);
+    }
+  };
   new MutationObserver(scheduleRender).observe(document.documentElement, { childList: true, subtree: true });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", scheduleRender);
   else scheduleRender();
