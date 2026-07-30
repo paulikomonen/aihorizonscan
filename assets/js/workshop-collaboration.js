@@ -168,6 +168,7 @@
     style.textContent = `
       .sr-collab-banner{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0 14px;padding:9px 11px;border:1px solid rgba(24,0,97,.14);border-radius:12px;background:rgba(24,0,97,.035);font-size:12px;color:rgba(24,0,97,.72)}
       .sr-collab-live{width:8px;height:8px;border-radius:50%;background:#2a9d62;box-shadow:0 0 0 4px rgba(42,157,98,.12)}
+      .sr-collab-panel{width:100%;box-sizing:border-box}
       .sr-collab-snapshot{margin:14px 0;padding:14px;border:1px solid rgba(42,157,98,.22);border-radius:16px;background:rgba(42,157,98,.035)}
       .sr-collab-group{margin-top:14px;padding:13px;border:1px solid rgba(42,157,98,.22);border-radius:14px;background:rgba(42,157,98,.035)}
       .sr-collab-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:8px}
@@ -224,8 +225,16 @@
   function render() {
     if (!onRadarPage()) return;
     ensureStyles();
-    const panel = document.getElementById("signal-radar-mvp-panel");
-    if (!panel) return;
+    const assessmentPanel = document.getElementById("signal-radar-mvp-panel");
+    if (!assessmentPanel) return;
+    let panel = document.getElementById("signal-radar-collaboration-panel");
+    if (!panel) {
+      panel = document.createElement("section");
+      panel.id = "signal-radar-collaboration-panel";
+      panel.className = "foresight-panel sr-collab-panel";
+      panel.setAttribute("aria-label", "Workshop group results");
+      assessmentPanel.insertAdjacentElement("beforebegin", panel);
+    }
 
     let banner = panel.querySelector(".sr-collab-banner");
     if (!banner) {
@@ -243,8 +252,7 @@
     if (!snapshot) {
       snapshot = document.createElement("section");
       snapshot.className = "sr-collab-snapshot";
-      const grid = panel.querySelector(".sr-mvp-grid");
-      panel.insertBefore(snapshot, grid || null);
+      panel.appendChild(snapshot);
     }
     const snapshotHtml = groupSummaryHtml();
     if (snapshot.innerHTML !== snapshotHtml) snapshot.innerHTML = snapshotHtml;

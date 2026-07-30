@@ -225,18 +225,34 @@
     },
     async saveQualitativeSynthesis(content) {
       if (!state.client) throw new Error("Supabase is not configured.");
+      const sessionResult = await state.client.auth.getSession();
+      if (sessionResult.error) throw sessionResult.error;
+      const session = sessionResult.data && sessionResult.data.session;
+      if (!session || !session.user || session.user.is_anonymous) {
+        throw new Error("Your editor session is missing or has expired. Sign out, sign in again and retry.");
+      }
+      const access = await state.client.rpc("is_editor");
+      if (access.error) throw access.error;
+      if (access.data !== true) {
+        throw new Error("The signed-in account is not approved to update Dashboard content.");
+      }
+      const cleaned = String(content || "").trim();
       const result = await state.client.rpc("set_qualitative_synthesis", {
-        p_content: String(content || "").trim()
+        p_content: cleaned
       });
       if (result.error) throw result.error;
       const saved = Array.isArray(result.data) ? result.data[0] : result.data;
       if (!saved) throw new Error("Supabase did not return the saved synthesis.");
+      const verified = await backend.getQualitativeSynthesis();
+      if (!verified || verified.content !== cleaned) {
+        throw new Error("Supabase accepted the request but the saved synthesis could not be verified.");
+      }
       try {
         window.dispatchEvent(new CustomEvent("aihorizon:synthesis-updated", {
-          detail: saved
+          detail: verified
         }));
       } catch (error) {}
-      return saved;
+      return verified;
     }
   };
 

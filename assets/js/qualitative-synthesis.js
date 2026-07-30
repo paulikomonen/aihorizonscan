@@ -50,6 +50,12 @@
     if (/row-level security|permission denied|42501/i.test(message)) {
       return "Supabase rejected the update. Confirm that you are signed in with an approved editor account, then re-run the dashboard content migration.";
     }
+    if (/session is missing|session.*expired/i.test(message)) {
+      return message;
+    }
+    if (/not approved/i.test(message)) {
+      return message + " Check that the same lowercase email address is present in public.editor_accounts.";
+    }
     return message || "The synthesis could not be saved.";
   }
 
@@ -208,9 +214,10 @@
       try {
         cachedRecord = await backend.saveQualitativeSynthesis(content);
         loadAttempted = true;
+        lastLoadError = null;
         textarea.value = cachedRecord.content;
         meta.textContent = "Last saved " + formattedDate(cachedRecord.updated_at);
-        status.textContent = "Saved. The Dashboard now shows this synthesis.";
+        status.textContent = "Saved and verified. The Dashboard now shows this synthesis.";
         updateCounter(panel);
       } catch (error) {
         status.textContent = helpfulError(error);
