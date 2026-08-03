@@ -361,6 +361,39 @@
         });
       }
       const match = pathname.match(/^\/api\/signals\/([^/]+)$/);
+      if (method === "PATCH" && match) {
+        const signalId = decodeURIComponent(match[1]);
+        const access = await state.client.rpc("is_editor");
+        if (access.error) throw access.error;
+        if (access.data !== true) throw new Error("Editor authentication is required to update signals.");
+
+        const current = await state.client
+          .from("signals")
+          .select("*")
+          .eq("signal_id", signalId)
+          .single();
+        if (current.error) throw current.error;
+
+        const merged = Object.assign({}, toSignal(current.data), body || {}, {
+          signalId: signalId,
+          origin: (body && body.origin) || current.data.origin || "database"
+        });
+        if (!String(merged.title || "").trim()) throw new Error("Signal title is required.");
+        const row = fromSignal(merged);
+        // Signal IDs remain immutable because ratings reference them.
+        delete row.signal_id;
+        delete row.is_archived;
+
+        const updated = await state.client
+          .from("signals")
+          .update(row)
+          .eq("signal_id", signalId)
+          .select()
+          .single();
+        if (updated.error) throw updated.error;
+        await loadSignals();
+        return jsonResponse({ signal: toSignal(updated.data) });
+      }
       if (method === "DELETE" && match) {
         const signalId = decodeURIComponent(match[1]);
         const access = await state.client.rpc("is_editor");

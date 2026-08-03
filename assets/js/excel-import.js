@@ -101,7 +101,8 @@
     return { errors: errors, warnings: warnings };
   }
 
-  function currentSignals() {
+  function currentSignals(forceRefresh) {
+    if (forceRefresh) return backend.loadSignals();
     if (Array.isArray(window.__AIHORIZON_LIVE_SIGNALS)) return Promise.resolve(window.__AIHORIZON_LIVE_SIGNALS);
     return backend.loadSignals();
   }
@@ -201,6 +202,66 @@
     }
   }
 
+  function exportValue(signal, index) {
+    const field = fields[index];
+    const value = signal[field];
+    if (field !== "date") return text(value);
+    const normalized = excelDate(value);
+    if (!normalized) return "";
+    const parts = normalized.split("-").map(Number);
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  }
+
+  async function exportWorkbook(panel) {
+    if (!window.XLSX) {
+      setStatus(panel, "The Excel writer did not load. Refresh the page and try again.", "error");
+      return;
+    }
+    const button = panel.querySelector("#excel-export-button");
+    button.disabled = true;
+    button.textContent = "Preparing export…";
+    setStatus(panel, "Loading the current active signals from Supabase…", "info");
+    try {
+      const signals = await currentSignals(true);
+      if (!signals.length) throw new Error("There are no active signals to export.");
+      const rows = [requiredHeaders].concat(signals.map(function (signal) {
+        return fields.map(function (_field, index) { return exportValue(signal, index); });
+      }));
+      const sheet = window.XLSX.utils.aoa_to_sheet(rows, { cellDates: true });
+      sheet["!cols"] = [
+        12, 12, 16, 18, 22, 20, 22, 25, 38, 70, 35, 14, 42, 42, 55, 45, 22
+      ].map(function (width) { return { wch: width }; });
+      sheet["!autofilter"] = { ref: "A1:Q" + rows.length };
+      sheet["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", activePane: "bottomLeft", state: "frozen" };
+      for (let row = 2; row <= rows.length; row += 1) {
+        const dateCell = sheet["B" + row];
+        if (dateCell && dateCell.v instanceof Date) dateCell.z = "yyyy-mm-dd";
+      }
+      requiredHeaders.forEach(function (_header, index) {
+        const address = window.XLSX.utils.encode_cell({ r: 0, c: index });
+        if (!sheet[address]) return;
+        sheet[address].s = {
+          fill: { fgColor: { rgb: "180061" } },
+          font: { bold: true, color: { rgb: "FFFFFF" } },
+          alignment: { vertical: "center", wrapText: true }
+        };
+      });
+      const workbook = window.XLSX.utils.book_new();
+      window.XLSX.utils.book_append_sheet(workbook, sheet, "Signals");
+      const today = new Date().toISOString().slice(0, 10);
+      window.XLSX.writeFile(workbook, "AI Horizon Scanning Main Database - " + today + ".xlsx", {
+        compression: true,
+        cellDates: true
+      });
+      setStatus(panel, "Exported " + signals.length + " active signals. This file includes edits made in Signals and Radar.", "success");
+    } catch (error) {
+      setStatus(panel, error.message || "The current database could not be exported.", "error");
+    } finally {
+      button.disabled = false;
+      button.textContent = "Export current signals to Excel";
+    }
+  }
+
   function install() {
     if (!(window.location.hash || "").includes("/update")) return;
     if (document.getElementById("excel-master-sync-panel")) return;
@@ -216,7 +277,9 @@
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px">
         <label class="foresight-button secondary" style="cursor:pointer">Choose Excel file<input id="excel-master-file" type="file" accept=".xlsx,.xls" style="display:none"></label>
         <button id="excel-sync-button" type="button" class="foresight-button" disabled>Synchronize Excel to Supabase</button>
+        <button id="excel-export-button" type="button" class="foresight-button secondary">Export current signals to Excel</button>
       </div>
+      <p class="foresight-body" style="margin-top:10px;font-size:12px">After editing signals on the website or repositioning them in Radar, export the current database if you want those changes reflected in your Excel master.</p>
       <div id="excel-sync-status" style="display:none;margin-top:12px;padding:9px 11px;border:1px solid hsl(var(--border));border-radius:9px;font-size:12px"></div>
       <div id="excel-sync-preview" style="display:none;margin-top:12px"></div>`;
     jsonCard.parentNode.insertBefore(panel, jsonCard);
@@ -229,6 +292,7 @@
       });
     });
     panel.querySelector("#excel-sync-button").addEventListener("click", function () { synchronize(panel); });
+    panel.querySelector("#excel-export-button").addEventListener("click", function () { exportWorkbook(panel); });
   }
 
   function schedule() {
