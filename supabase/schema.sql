@@ -242,8 +242,8 @@ create policy "Participants delete their own ratings"
   to authenticated
   using (participant_id = auth.uid());
 
--- Returns anonymous group-level summaries without exposing raw participant IDs
--- or individual strategic notes.
+-- Returns anonymous group-level summaries and strategic notes without exposing
+-- participant IDs. Notes remain attributable only to a signal and workshop.
 create or replace function public.get_workshop_aggregates(p_workshop_slug text)
 returns table (
   signal_id text,
@@ -253,7 +253,8 @@ returns table (
   watch_count bigint,
   prepare_count bigint,
   act_count bigint,
-  important_count bigint
+  important_count bigint,
+  strategic_notes text[]
 )
 language sql
 security definer
@@ -268,7 +269,12 @@ as $$
     count(*) filter (where r.recommended_response = 'Watch') as watch_count,
     count(*) filter (where r.recommended_response = 'Prepare') as prepare_count,
     count(*) filter (where r.recommended_response = 'Act') as act_count,
-    count(*) filter (where r.important) as important_count
+    count(*) filter (where r.important) as important_count,
+    coalesce(
+      array_agg(btrim(r.note) order by r.updated_at desc)
+        filter (where nullif(btrim(r.note), '') is not null),
+      array[]::text[]
+    ) as strategic_notes
   from public.ratings r
   join public.workshops w on w.id = r.workshop_id
   where w.slug = p_workshop_slug
