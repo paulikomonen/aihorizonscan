@@ -18,6 +18,7 @@
   let lastPayload = "";
   let lastRefreshAt = null;
   let refreshing = false;
+  let openDriverId = "";
 
   function esc(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (char) {
@@ -84,6 +85,50 @@
     }));
   }
 
+  function findSignal(signalId) {
+    const wanted = String(signalId || "");
+    return readSignals().find(function (signal) {
+      return String(signal.signalId || signal.signalID || signal.id || "") === wanted;
+    }) || null;
+  }
+
+  function signalValue(signal, keys, fallback) {
+    for (let index = 0; index < keys.length; index += 1) {
+      const value = signal && signal[keys[index]];
+      if (value != null && String(value).trim()) return String(value).trim();
+    }
+    return fallback || "";
+  }
+
+  function safeSourceUrl(value) {
+    try {
+      const parsed = new URL(String(value || ""));
+      return /^https?:$/.test(parsed.protocol) ? parsed.href : "";
+    } catch (error) { return ""; }
+  }
+
+  function strategicNotes(item) {
+    if (!item || item.strategic_notes == null) return [];
+    let notes = item.strategic_notes;
+    if (typeof notes === "string") {
+      try {
+        const parsed = JSON.parse(notes);
+        notes = Array.isArray(parsed) ? parsed : [notes];
+      } catch (error) { notes = [notes]; }
+    }
+    return (Array.isArray(notes) ? notes : []).map(function (note) {
+      return String(note == null ? "" : note).trim();
+    }).filter(Boolean);
+  }
+
+  function noteListHtml(item) {
+    const notes = strategicNotes(item);
+    if (!notes.length) return '<div class="sr-collab-empty">No shared strategic notes for this signal yet.</div>';
+    return '<ol class="sr-collab-note-list">' + notes.map(function (note) {
+      return '<li><span class="sr-collab-note-author">Anonymous participant</span>' + esc(note) + '</li>';
+    }).join("") + "</ol>";
+  }
+
   function scoreLabel(value) {
     const rounded = Math.round(Number(value) || 0);
     return ["—", "Low", "Medium", "High"][rounded] || "—";
@@ -109,7 +154,58 @@
         <div><strong>${esc(modalResponse(item))}</strong><span>most common response</span></div>
       </div>
       <div class="sr-collab-distribution">Watch ${Number(item.watch_count) || 0} · Prepare ${Number(item.prepare_count) || 0} · Act ${Number(item.act_count) || 0} · Important ${Number(item.important_count) || 0}</div>
+      <div class="sr-collab-selected-notes">
+        <div class="sr-mvp-label">Shared strategic notes · ${strategicNotes(item).length}</div>
+        ${noteListHtml(item)}
+      </div>
     `;
+  }
+
+  function driverDetailHtml(signalId) {
+    if (!signalId) return "";
+    const signal = findSignal(signalId);
+    if (!signal) return "";
+    const title = signalValue(signal, ["title", "Title"], signalId);
+    const description = signalValue(signal, ["description", "Description"], "No description is available for this signal.");
+    const pestec = signalValue(signal, ["pestecClass", "PESTEC class"], "Unspecified");
+    const response = signalValue(signal, ["responseStage", "Organisational response stage"], "Unspecified");
+    const direction = signalValue(signal, ["direction", "Direction"], "Mixed");
+    const source = safeSourceUrl(signalValue(signal, ["source", "Source"], ""));
+    return `
+      <div class="sr-collab-driver-detail" id="sr-collab-driver-detail" tabindex="-1">
+        <div class="sr-collab-driver-detail-heading"><strong>${esc(signalId)}</strong><span>${esc(title)}</span></div>
+        <p>${esc(description)}</p>
+        <div class="sr-collab-driver-meta"><span>${esc(pestec)}</span><span>${esc(response)}</span><span>${esc(direction)}</span></div>
+        ${source ? '<a href="' + esc(source) + '" target="_blank" rel="noreferrer">Open source ↗</a>' : ""}
+      </div>`;
+  }
+
+  function sharedNotesHtml(rows, titles) {
+    const withNotes = rows.map(function (item) {
+      return { item: item, notes: strategicNotes(item) };
+    }).filter(function (entry) { return entry.notes.length > 0; });
+    const noteCount = withNotes.reduce(function (total, entry) { return total + entry.notes.length; }, 0);
+    if (!withNotes.length) {
+      return `
+        <div class="sr-collab-notes-board">
+          <div class="sr-mvp-label">Shared strategic notes</div>
+          <div class="sr-collab-empty">Saved workshop notes will appear here anonymously.</div>
+        </div>`;
+    }
+    return `
+      <div class="sr-collab-notes-board">
+        <div class="sr-mvp-label">Shared strategic notes · ${noteCount}</div>
+        <div class="sr-collab-notes-help">Notes are grouped by signal and shown without participant identifiers.</div>
+        <div class="sr-collab-note-groups">
+          ${withNotes.map(function (entry) {
+            const id = String(entry.item.signal_id || "");
+            return '<details class="sr-collab-note-group"' + (id === selectedId() ? " open" : "") + '><summary><span><strong>'
+              + esc(id) + '</strong> · ' + esc(titles.get(id) || id) + '</span><small>'
+              + entry.notes.length + ' note' + (entry.notes.length === 1 ? "" : "s") + '</small></summary>'
+              + noteListHtml(entry.item) + '</details>';
+          }).join("")}
+        </div>
+      </div>`;
   }
 
   function groupSummaryHtml() {
@@ -122,6 +218,7 @@
     const scenarioDrivers = rows.filter(function (item) {
       return Number(item.avg_impact || 0) >= 2.5 && Number(item.avg_uncertainty || 0) >= 2.5;
     });
+    if (openDriverId && !scenarioDrivers.some(function (item) { return item.signal_id === openDriverId; })) openDriverId = "";
     const titles = signalTitles();
     const priorityList = priorities.slice().sort(function (a, b) {
       return (Number(b.avg_impact || 0) + Number(b.important_count || 0) * 0.1) - (Number(a.avg_impact || 0) + Number(a.important_count || 0) * 0.1);
@@ -133,11 +230,14 @@
         - (Number(a.avg_impact || 0) + Number(a.avg_uncertainty || 0));
       return scoreDifference || Number(b.rating_count || 0) - Number(a.rating_count || 0);
     }).map(function (item) {
-      return '<li><strong>' + esc(item.signal_id) + '</strong> · '
-        + esc(titles.get(item.signal_id) || item.signal_id)
+      const expanded = openDriverId === item.signal_id;
+      return '<li><button type="button" class="sr-collab-driver-button" data-collab-driver="' + esc(item.signal_id)
+        + '" aria-expanded="' + (expanded ? "true" : "false") + '" aria-controls="sr-collab-driver-detail"><strong>'
+        + esc(item.signal_id) + '</strong> · ' + esc(titles.get(item.signal_id) || item.signal_id)
         + '<span class="sr-collab-driver-scores">Impact ' + Number(item.avg_impact || 0).toFixed(1)
         + ' · Uncertainty ' + Number(item.avg_uncertainty || 0).toFixed(1)
-        + ' · n=' + Number(item.rating_count || 0) + '</span></li>';
+        + ' · n=' + Number(item.rating_count || 0) + '</span><span class="sr-collab-driver-open">'
+        + (expanded ? "Hide description" : "View description") + '</span></button></li>';
     }).join("");
 
     return `
@@ -152,12 +252,14 @@
         <div>
           <div class="sr-mvp-label">Scenario drivers</div>
           ${scenarioDriverList ? '<ul class="sr-mvp-summary-list sr-collab-driver-list">' + scenarioDriverList + '</ul>' : '<div class="sr-collab-empty">Scenario drivers will appear when a group-rated signal crosses both thresholds.</div>'}
+          ${driverDetailHtml(openDriverId)}
         </div>
         <div>
           <div class="sr-mvp-label">Leading group priorities</div>
           ${priorityList ? '<ul class="sr-mvp-summary-list">' + priorityList + '</ul>' : '<div class="sr-collab-empty">Group priorities will appear after participants submit ratings.</div>'}
         </div>
       </div>
+      ${sharedNotesHtml(rows, titles)}
     `;
   }
 
@@ -184,7 +286,27 @@
       .sr-collab-summary-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:14px}
       .sr-collab-driver-list li:before{color:#7c3aed}
       .sr-collab-driver-scores{display:block;margin-top:2px;font-size:10px;color:rgba(24,0,97,.58)}
-      .dark .sr-collab-banner,.dark .sr-collab-snapshot,.dark .sr-collab-group,.dark .sr-collab-metrics div{background:hsl(var(--card)/.88);border-color:hsl(var(--border));color:hsl(var(--foreground))}.dark .sr-collab-metrics strong{color:hsl(var(--foreground))}.dark .sr-collab-metrics span,.dark .sr-collab-distribution,.dark .sr-collab-empty,.dark .sr-collab-driver-key,.dark .sr-collab-driver-scores{color:hsl(var(--muted-foreground))}
+      .sr-collab-driver-button{display:block;width:100%;padding:0;border:0;background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer}
+      .sr-collab-driver-button:hover strong,.sr-collab-driver-button:focus-visible strong{color:#7c3aed;text-decoration:underline;text-underline-offset:3px}
+      .sr-collab-driver-button:focus-visible{outline:2px solid #7c3aed;outline-offset:4px;border-radius:5px}
+      .sr-collab-driver-open{display:inline-block;margin-top:4px;font-size:10px;font-weight:700;color:#6d28d9}
+      .sr-collab-driver-detail{margin-top:10px;padding:12px;border:1px solid rgba(124,58,237,.24);border-radius:12px;background:rgba(124,58,237,.055)}
+      .sr-collab-driver-detail-heading{display:grid;gap:2px;font-size:13px;color:#180061}.sr-collab-driver-detail-heading span{font-weight:700}
+      .sr-collab-driver-detail p{margin-top:8px;font-size:12px;line-height:1.52;color:rgba(24,0,97,.76)}
+      .sr-collab-driver-detail>a{display:inline-block;margin-top:9px;font-size:11px;font-weight:700;color:#6d28d9;text-decoration:underline;text-underline-offset:3px}
+      .sr-collab-driver-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}.sr-collab-driver-meta span{padding:3px 7px;border:1px solid rgba(124,58,237,.18);border-radius:999px;font-size:10px;color:rgba(24,0,97,.7);background:white}
+      .sr-collab-selected-notes{margin-top:13px;padding-top:12px;border-top:1px solid rgba(42,157,98,.18)}
+      .sr-collab-notes-board{margin-top:18px;padding-top:15px;border-top:1px solid rgba(24,0,97,.11)}
+      .sr-collab-notes-help{margin-top:4px;font-size:11px;color:rgba(24,0,97,.62)}
+      .sr-collab-note-groups{display:grid;gap:8px;margin-top:10px}
+      .sr-collab-note-group{border:1px solid rgba(24,0,97,.11);border-radius:11px;background:white;overflow:hidden}
+      .sr-collab-note-group summary{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:9px 11px;cursor:pointer;font-size:12px;color:rgba(24,0,97,.78)}
+      .sr-collab-note-group summary small{white-space:nowrap;color:rgba(24,0,97,.55)}
+      .sr-collab-note-list{display:grid;gap:7px;margin:8px 0 0;padding:0;list-style:none}
+      .sr-collab-note-group .sr-collab-note-list{margin:0;padding:0 11px 11px}
+      .sr-collab-note-list li{padding:8px 10px;border-left:3px solid #2a9d62;border-radius:0 8px 8px 0;background:rgba(42,157,98,.055);font-size:12px;line-height:1.48;color:rgba(24,0,97,.78)}
+      .sr-collab-note-author{display:block;margin-bottom:2px;font-size:9px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;color:rgba(24,0,97,.48)}
+      .dark .sr-collab-banner,.dark .sr-collab-snapshot,.dark .sr-collab-group,.dark .sr-collab-metrics div,.dark .sr-collab-note-group,.dark .sr-collab-driver-meta span{background:hsl(var(--card)/.88);border-color:hsl(var(--border));color:hsl(var(--foreground))}.dark .sr-collab-metrics strong,.dark .sr-collab-driver-detail-heading{color:hsl(var(--foreground))}.dark .sr-collab-metrics span,.dark .sr-collab-distribution,.dark .sr-collab-empty,.dark .sr-collab-driver-key,.dark .sr-collab-driver-scores,.dark .sr-collab-notes-help,.dark .sr-collab-note-group summary,.dark .sr-collab-note-group summary small,.dark .sr-collab-note-list li,.dark .sr-collab-driver-detail p,.dark .sr-collab-driver-meta span{color:hsl(var(--muted-foreground))}.dark .sr-collab-note-list li,.dark .sr-collab-driver-detail{background:hsl(var(--muted)/.3)}
       @media(max-width:700px){.sr-collab-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.sr-collab-summary-columns{grid-template-columns:1fr}}
     `;
     document.head.appendChild(style);
@@ -355,6 +477,18 @@
   }
 
   document.addEventListener("click", function (event) {
+    const driverButton = event.target.closest && event.target.closest("[data-collab-driver]");
+    if (driverButton) {
+      event.preventDefault();
+      const signalId = driverButton.getAttribute("data-collab-driver") || "";
+      openDriverId = openDriverId === signalId ? "" : signalId;
+      render();
+      if (openDriverId) setTimeout(function () {
+        const detail = document.getElementById("sr-collab-driver-detail");
+        if (detail) { detail.focus({ preventScroll: true }); detail.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+      }, 0);
+      return;
+    }
     if (event.target.closest && (event.target.closest("[data-sr-field]") || event.target.closest("[data-sr-action]") || event.target.closest('[data-testid^="radar-dot-"]'))) scheduleSync();
   }, false);
   document.addEventListener("visibilitychange", function () {

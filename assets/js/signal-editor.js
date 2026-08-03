@@ -89,6 +89,7 @@
       .aih-editor-button:hover{border-color:#180061;background:rgba(24,0,97,.05)}
       .aih-editor-button:disabled{opacity:.55;cursor:not-allowed}
       .aih-signal-edit-button{margin-right:8px}
+      .aih-signal-add-wrap{display:flex;align-items:center;gap:9px;margin-top:10px}
       .aih-editor-overlay{position:fixed;inset:0;z-index:10000;background:rgba(10,5,30,.58);display:flex;align-items:center;justify-content:center;padding:20px}
       .aih-editor-modal{width:min(960px,100%);max-height:min(92vh,940px);overflow:auto;border-radius:18px;border:1px solid hsl(var(--border));background:hsl(var(--background));color:hsl(var(--foreground));box-shadow:0 28px 90px rgba(0,0,0,.3)}
       .aih-editor-header{position:sticky;top:0;z-index:2;display:flex;align-items:flex-start;gap:16px;padding:20px 22px;border-bottom:1px solid hsl(var(--border));background:hsl(var(--background))}
@@ -115,7 +116,7 @@
       .aih-radar-editor-note{margin:8px 0 0;padding:9px 11px;border:1px solid rgba(24,0,97,.18);border-radius:10px;background:rgba(24,0,97,.045);font-size:12px;color:hsl(var(--muted-foreground))}
       [data-testid^="radar-dot-"].aih-radar-editable{cursor:grab!important;touch-action:none}
       [data-testid^="radar-dot-"].aih-radar-editable>circle:first-of-type{stroke:#ffd400!important;stroke-width:2.5!important}
-      [data-testid^="radar-dot-"].aih-radar-dragging{cursor:grabbing!important;filter:drop-shadow(0 8px 10px rgba(24,0,97,.2))}
+      [data-testid^="radar-dot-"].aih-radar-dragging{cursor:grabbing!important;filter:drop-shadow(0 8px 10px rgba(24,0,97,.2));transition:none!important}
       .aih-radar-drag-label{position:fixed;z-index:10010;pointer-events:none;border-radius:999px;padding:6px 9px;background:#180061;color:white;font-size:12px;font-weight:750;box-shadow:0 8px 20px rgba(24,0,97,.2)}
       @media(max-width:720px){.aih-editor-overlay{padding:8px}.aih-editor-grid{grid-template-columns:1fr}.aih-editor-field.full{grid-column:auto}.aih-editor-modal{max-height:96vh}.aih-editor-header,.aih-editor-form{padding-left:15px;padding-right:15px}}
     `;
@@ -165,6 +166,17 @@
     });
     const payload = await response.json().catch(function () { return {}; });
     if (!response.ok) throw new Error(payload.message || "Signal update failed (" + response.status + ").");
+    return payload.signal;
+  }
+
+  async function createSignal(signal) {
+    const response = await window.fetch("/api/signals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(signal)
+    });
+    const payload = await response.json().catch(function () { return {}; });
+    if (!response.ok) throw new Error(payload.message || "Signal creation failed (" + response.status + ").");
     return payload.signal;
   }
 
@@ -229,8 +241,50 @@
     return '<div class="' + className + '"><label for="aih-field-' + name + '">' + esc(label) + '</label><input class="aih-editor-input" id="aih-field-' + name + '" name="' + name + '" type="' + (settings.type || "text") + '" value="' + esc(value) + '"' + (settings.readonly ? " readonly" : "") + "></div>";
   }
 
-  function openSignalEditor(signalId) {
-    const signal = findSignal(signalId);
+  function nextSignalId() {
+    const used = new Set(readSignals().map(function (signal) { return text(signal.signalId); }));
+    const highest = Array.from(used).reduce(function (current, signalId) {
+      const match = signalId.match(/^AI-(\d+)$/i);
+      return match ? Math.max(current, Number(match[1]) || 0) : current;
+    }, 0);
+    let number = highest + 1;
+    let candidate = "";
+    do {
+      candidate = "AI-" + String(number).padStart(3, "0");
+      number += 1;
+    } while (used.has(candidate));
+    return candidate;
+  }
+
+  function newSignalTemplate() {
+    const now = new Date();
+    const localDate = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-");
+    return {
+      signalId: nextSignalId(),
+      date: localDate,
+      geography: "Global",
+      pestecClass: "Technological",
+      aiDomain: "",
+      sector: "Cross-sector",
+      foresightCharacter: "Weak signal",
+      responseStage: "Watch",
+      direction: "Mixed",
+      evidenceType: "",
+      title: "",
+      description: "",
+      mainActors: "",
+      indicators: "",
+      innovationStages: "Identify opportunities",
+      innovationImpact: "",
+      source: "",
+      origin: "web-editor"
+    };
+  }
+
+  function openSignalEditor(signalId, options) {
+    const settings = options || {};
+    const isNew = settings.create === true;
+    const signal = isNew ? newSignalTemplate() : findSignal(signalId);
     if (!signal) {
       showNotice("The selected signal could not be found. Refresh the page and try again.", { error: true });
       return;
@@ -245,7 +299,7 @@
     overlay.innerHTML = `
       <div class="aih-editor-modal" role="dialog" aria-modal="true" aria-labelledby="aih-editor-title">
         <div class="aih-editor-header">
-          <div><div class="foresight-kicker">Signal database</div><h2 id="aih-editor-title">Edit signal content</h2></div>
+          <div><div class="foresight-kicker">Signal database</div><h2 id="aih-editor-title">${isNew ? "Add new signal" : "Edit signal content"}</h2></div>
           <button type="button" class="aih-editor-close" aria-label="Close editor">×</button>
         </div>
         <form class="aih-editor-form" id="aih-signal-editor-form">
@@ -274,9 +328,9 @@
             ${field("source", "Source URL", signal.source, { type: "url", full: true })}
           </div>
           <div class="aih-editor-actions">
-            <span class="aih-editor-status" id="aih-editor-status" aria-live="polite">Changes will update all website views after saving.</span>
+            <span class="aih-editor-status" id="aih-editor-status" aria-live="polite">${isNew ? "A unique Signal ID has been assigned automatically." : "Changes will update all website views after saving."}</span>
             <button type="button" class="aih-editor-button" data-action="cancel">Cancel</button>
-            <button type="submit" class="aih-editor-button aih-editor-save">Save changes</button>
+            <button type="submit" class="aih-editor-button aih-editor-save">${isNew ? "Add signal" : "Save changes"}</button>
           </div>
         </form>
       </div>`;
@@ -310,26 +364,32 @@
         innovationImpact: text(formData.get("innovationImpact")),
         source: text(formData.get("source"))
       });
-      const error = validateSignal(next);
+      const error = validateSignal(next, isNew);
       if (error) { status.textContent = error; return; }
       saveButton.disabled = true;
       saveButton.textContent = "Saving…";
       status.textContent = "Saving the signal to Supabase…";
       try {
-        await updateSignal(signal.signalId, next);
-        storeUndo(signal, signal.signalId + " was updated. All views now use the revised content.");
+        if (isNew) {
+          await createSignal(next);
+        } else {
+          await updateSignal(signal.signalId, next);
+          storeUndo(signal, signal.signalId + " was updated. All views now use the revised content.");
+        }
         status.textContent = "Saved. Refreshing the website…";
         setTimeout(function () { window.location.reload(); }, 350);
       } catch (error) {
         saveButton.disabled = false;
-        saveButton.textContent = "Save changes";
+        saveButton.textContent = isNew ? "Add signal" : "Save changes";
         status.textContent = error.message || "The signal could not be saved.";
       }
     });
     overlay.querySelector('[name="title"]').focus();
   }
 
-  function validateSignal(signal) {
+  function validateSignal(signal, isNew) {
+    if (!signal.signalId) return "Signal ID is required.";
+    if (isNew && findSignal(signal.signalId)) return "That Signal ID already exists. Close the form and try again.";
     if (!signal.title || signal.title.length < 3) return "Enter a signal title.";
     if (!/^\d{4}-\d{2}-\d{2}$/.test(signal.date)) return "Enter a valid date.";
     if (!PESTEC.includes(signal.pestecClass)) return "Select a valid PESTEC class.";
@@ -371,6 +431,29 @@
     else actionArea.appendChild(button);
   }
 
+  function installSignalAddButton() {
+    if (!onSignalsPage() || editorAllowed !== true || document.getElementById("aih-add-signal-button")) return;
+    const heading = Array.from(document.querySelectorAll("h1, h2")).find(function (item) {
+      return text(item.textContent) === "Signals";
+    });
+    const header = heading && (heading.closest("header") || heading.parentElement);
+    if (!header) return;
+    const wrap = document.createElement("div");
+    wrap.className = "aih-signal-add-wrap";
+    const button = document.createElement("button");
+    button.id = "aih-add-signal-button";
+    button.type = "button";
+    button.className = "foresight-button";
+    button.textContent = "+ Add new signal";
+    button.addEventListener("click", function () { openSignalEditor("", { create: true }); });
+    const hint = document.createElement("span");
+    hint.className = "aih-editor-status";
+    hint.textContent = "Add directly to the shared signal database.";
+    wrap.appendChild(button);
+    wrap.appendChild(hint);
+    header.appendChild(wrap);
+  }
+
   function setRadarMode(enabled) {
     radarEditMode = Boolean(enabled);
     try { sessionStorage.setItem(RADAR_MODE_KEY, radarEditMode ? "on" : "off"); } catch (error) {}
@@ -399,7 +482,7 @@
       note = document.createElement("div");
       note.id = "aih-radar-editor-note";
       note.className = "aih-radar-editor-note";
-      note.textContent = "Editor mode: drag a dot inward or outward. It snaps to Act, Prepare or Watch and updates the signal in Supabase. The PESTEC sector remains unchanged.";
+      note.textContent = "Editor mode: drag a dot smoothly inward or outward, then release to snap it to Act, Prepare or Watch. The PESTEC sector remains unchanged.";
       labelsButton.parentElement.insertAdjacentElement("afterend", note);
     }
     if (!radarEditMode && note) note.remove();
@@ -444,9 +527,11 @@
     const point = svgPoint(dragState.svg, event);
     const radius = Math.hypot(point.x - dragState.centerX, point.y - dragState.centerY);
     const stage = stageFromRadius(radius, dragState.innerRadius, dragState.outerRadius);
-    const targetRadius = stageRadius(stage, dragState.innerRadius, dragState.outerRadius);
-    const targetX = dragState.centerX + targetRadius * Math.cos(dragState.angle);
-    const targetY = dragState.centerY + targetRadius * Math.sin(dragState.angle);
+    // Follow the pointer continuously during the preview. The target stage is
+    // still derived from the ring beneath the pointer and is snapped on save.
+    const previewRadius = Math.max(dragState.innerRadius + 9, Math.min(dragState.outerRadius - 9, radius));
+    const targetX = dragState.centerX + previewRadius * Math.cos(dragState.angle);
+    const targetY = dragState.centerY + previewRadius * Math.sin(dragState.angle);
     dragState.targetStage = stage;
     dragState.dot.setAttribute("transform", "translate(" + (targetX - dragState.baseX).toFixed(2) + " " + (targetY - dragState.baseY).toFixed(2) + ")");
     let label = document.getElementById("aih-radar-drag-label");
@@ -522,8 +607,11 @@
       cancelDrag();
       return;
     }
+    const snappedRadius = stageRadius(state.targetStage, state.innerRadius, state.outerRadius);
+    const snappedX = state.centerX + snappedRadius * Math.cos(state.angle);
+    const snappedY = state.centerY + snappedRadius * Math.sin(state.angle);
+    state.dot.setAttribute("transform", "translate(" + (snappedX - state.baseX).toFixed(2) + " " + (snappedY - state.baseY).toFixed(2) + ")");
     dragState = null;
-    state.dot.classList.remove("aih-radar-dragging");
     showNotice("Saving " + state.signalId + " as " + state.targetStage + "…", { persistent: true });
     try {
       const next = Object.assign({}, state.signal, { responseStage: state.targetStage });
@@ -533,6 +621,7 @@
     } catch (error) {
       if (state.originalTransform) state.dot.setAttribute("transform", state.originalTransform);
       else state.dot.removeAttribute("transform");
+      state.dot.classList.remove("aih-radar-dragging");
       showNotice(error.message || "The radar position could not be saved.", { error: true, persistent: true });
     }
   }
@@ -545,6 +634,7 @@
       if (!onSignalsPage() && !onRadarPage()) return;
       const allowed = await hasEditorAccess(false);
       if (!allowed) return;
+      installSignalAddButton();
       installSignalEditButton();
       installRadarControls();
     }, 90);

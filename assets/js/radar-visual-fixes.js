@@ -156,6 +156,10 @@
   function improveRadar() {
     const svg = document.querySelector('[data-testid="signal-radar"]');
     if (!svg) return;
+    // The editor owns dot transforms while a pointer drag is active. Running
+    // collision separation at the same time makes the dragged dot jump between
+    // the editor preview and its collision-adjusted position.
+    if (svg.querySelector(".aih-radar-dragging")) return;
     ensureStyles();
     addHorizontalLabelSpace(svg);
     const viewBox = svg.viewBox && svg.viewBox.baseVal;
