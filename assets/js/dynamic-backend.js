@@ -53,12 +53,15 @@
     return Object.assign({}, signal || {}, { signalId: signalId });
   }
 
-  async function insertSignalsWithoutOverwrite(incoming) {
+  async function loadReservedSignalIds() {
     const current = await state.client.from("signals").select("signal_id");
     if (current.error) throw current.error;
-    const usedKeys = new Set(asArray(current.data).map(function (row) {
-      return signalIdKey(row.signal_id);
-    }));
+    return asArray(current.data).map(function (row) { return row.signal_id; }).filter(Boolean);
+  }
+
+  async function insertSignalsWithoutOverwrite(incoming) {
+    const reservedIds = await loadReservedSignalIds();
+    const usedKeys = new Set(reservedIds.map(signalIdKey));
     const rows = asArray(incoming).map(function (signal) {
       return fromSignal(collisionSafeSignal(signal, usedKeys));
     });
@@ -184,6 +187,7 @@
     client: state.client,
     ensureAnonymousSession,
     loadSignals,
+    getReservedSignalIds: loadReservedSignalIds,
     async getWorkshop(slug) {
       if (!state.client) return null;
       let result = await state.client
@@ -339,6 +343,9 @@
     try {
       if (method === "GET" && pathname === "/api/signals") {
         return jsonResponse({ signals: await loadSignals() });
+      }
+      if (method === "GET" && pathname === "/api/signals/id-reservations") {
+        return jsonResponse({ signalIds: await loadReservedSignalIds() });
       }
 
       let body = {};
