@@ -177,8 +177,9 @@
   }
 
   function nextSignalId(signals) {
-    const nums = signals.map(s => String(s.signalId || '').match(/AI-(\d+)/)).filter(Boolean).map(m => Number(m[1]));
-    const next = nums.length ? Math.max(...nums) + 1 : 1;
+    const used = new Set(signals.map(s => String(s.signalId || '').match(/^AI-(\d+)$/i)).filter(Boolean).map(m => Number(m[1])).filter(n => Number.isInteger(n) && n > 0));
+    let next = 1;
+    while (used.has(next)) next += 1;
     return `AI-${String(next).padStart(3, '0')}`;
   }
 
@@ -192,8 +193,12 @@
       return fallback;
     };
     const stageValue = pick(['innovationStages', 'innovationStage', 'Innovation management process stage(s)', 'Innovation management process stages', 'Innovation stages', 'innovation_management_process_stages'], 'Identify opportunities');
+    const requestedSignalId = String(pick(['signalId', 'signalID', 'id', 'Signal ID', 'Signal Id', 'SignalID'], '')).trim();
+    const assignedSignalId = !requestedSignalId || /^AI-(?:NEW|AUTO)(?:-\d+)?$/i.test(requestedSignalId)
+      ? nextSignalId(signals)
+      : requestedSignalId;
     return {
-      signalId: String(pick(['signalId', 'signalID', 'id', 'Signal ID', 'Signal Id', 'SignalID'], nextSignalId(signals))),
+      signalId: assignedSignalId,
       date: String(pick(['date', 'Date'], now)),
       geography: String(pick(['geography', 'Geography'], 'Global')),
       pestecClass: String(pick(['pestecClass', 'pesteclClass', 'PESTEC class', 'PESTECL class', 'PESTEL class', 'PESTEC', 'PESTECL', 'pestec'], 'Technological')),
@@ -669,8 +674,9 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
   }
 
   function nextSignalId(signals) {
-    const nums = signals.map(s => String(s.signalId || '').match(/AI-(\d+)/)).filter(Boolean).map(m => Number(m[1]));
-    const next = nums.length ? Math.max(...nums) + 1 : 1;
+    const used = new Set(signals.map(s => String(s.signalId || '').match(/^AI-(\d+)$/i)).filter(Boolean).map(m => Number(m[1])).filter(n => Number.isInteger(n) && n > 0));
+    let next = 1;
+    while (used.has(next)) next += 1;
     return `AI-${String(next).padStart(3, '0')}`;
   }
 
@@ -685,8 +691,12 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
     input = input || {};
     const now = new Date().toISOString().slice(0, 10);
     const stages = pick(input, ['innovationStages', 'innovationStage', 'Innovation management process stage(s)', 'Innovation management process stages', 'Innovation stages', 'innovation_management_process_stages'], 'Identify opportunities');
+    const requestedSignalId = String(pick(input, ['signalId', 'signalID', 'id', 'Signal ID', 'Signal Id', 'SignalID'], '')).trim();
+    const assignedSignalId = !requestedSignalId || /^AI-(?:NEW|AUTO)(?:-\d+)?$/i.test(requestedSignalId)
+      ? nextSignalId(signals)
+      : requestedSignalId;
     return {
-      signalId: String(pick(input, ['signalId', 'signalID', 'id', 'Signal ID', 'Signal Id', 'SignalID'], nextSignalId(signals))),
+      signalId: assignedSignalId,
       date: String(pick(input, ['date', 'Date'], now)),
       geography: String(pick(input, ['geography', 'Geography'], 'Global')),
       pestecClass: String(pick(input, ['pestecClass', 'pesteclClass', 'PESTEC class', 'PESTECL class', 'PESTEL class', 'PESTEC', 'PESTECL', 'pestec'], 'Technological')),
@@ -943,6 +953,15 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
   }
 
   function text(v) { return String(v == null ? '' : v).trim(); }
+  function lowestAvailableSignalId(signals) {
+    const used = new Set((signals || []).map(function (signal) {
+      const match = text(signal.signalId || signal['Signal ID']).match(/^AI-(\d+)$/i);
+      return match ? Number(match[1]) : null;
+    }).filter(function (number) { return Number.isInteger(number) && number > 0; }));
+    let number = 1;
+    while (used.has(number)) number += 1;
+    return 'AI-' + String(number).padStart(3, '0');
+  }
   function splitMulti(v) { return text(v).split(/[;,|]/).map(s => s.trim()).filter(Boolean); }
   function countBy(signals, getter) {
     const map = new Map();
@@ -1181,19 +1200,24 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
           const current = readSignalsSync();
           const ids = new Set(current.map(s => text(s.signalId || s['Signal ID'])).filter(Boolean));
           const titles = new Set(current.map(s => text(s.title || s.Title).toLowerCase()).filter(Boolean));
+          const automaticallyAssigned = arr.filter(function (signal) {
+            const id = text(signal.signalId || signal.signalID || signal.id || signal['Signal ID']);
+            return !id || /^AI-(?:NEW|AUTO)(?:-\d+)?$/i.test(id);
+          }).length;
           const missingTitle = arr.filter(s => !text(s.title || s.Title)).length;
           const duplicates = arr.filter(s => ids.has(text(s.signalId || s['Signal ID'])) || titles.has(text(s.title || s.Title).toLowerCase())).length;
           const domains = countBy(arr, s => s.aiDomain || s['AI domain']).slice(0,5).map(([k,v]) => `${k}: ${v}`).join('\n');
           result.style.display = 'block';
-          result.textContent = `Ready to import: ${arr.length} signal${arr.length === 1 ? '' : 's'}\nMissing titles: ${missingTitle}\nPotential duplicates against current database: ${duplicates}\n\nTop AI domains in this batch:\n${domains || 'No AI domain fields detected.'}`;
+          result.textContent = `Ready to import: ${arr.length} signal${arr.length === 1 ? '' : 's'}\nAutomatic Signal IDs: ${automaticallyAssigned}${automaticallyAssigned ? ' (starting with ' + lowestAvailableSignalId(current) + ')' : ''}\nMissing titles: ${missingTitle}\nPotential duplicates against current database: ${duplicates}\n\nTop AI domains in this batch:\n${domains || 'No AI domain fields detected.'}`;
         } catch (e) {
           result.style.display = 'block';
           result.textContent = 'Validation failed: ' + (e && e.message ? e.message : 'Invalid JSON.');
         }
       });
       box.querySelector('#insert-json-template').addEventListener('click', function () {
+        const suggestedSignalId = lowestAvailableSignalId(readSignalsSync());
         textarea.value = JSON.stringify({ signals: [{
-          signalId: 'AI-NEW-001',
+          signalId: suggestedSignalId,
           date: new Date().toISOString().slice(0,10),
           geography: 'Global',
           pestecClass: 'Technological',
@@ -1618,7 +1642,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
 <script src="./assets/js/excel-import.js?v=20260803-1"></script>
 <script src="./assets/js/assessment-admin.js"></script>
 <script src="./assets/js/radar-visual-fixes.js?v=20260803-2"></script>
-<script src="./assets/js/workshop-collaboration.js?v=20260803-1"></script>
-<script src="./assets/js/signal-editor.js?v=20260803-2"></script>
+<script src="./assets/js/workshop-collaboration.js?v=20260805-1"></script>
+<script src="./assets/js/signal-editor.js?v=20260805-1"></script>
 </body>
 </html>
