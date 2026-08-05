@@ -29,9 +29,49 @@
     return Array.isArray(value) ? value : [];
   }
 
+  function signalIdKey(signalId) {
+    const value = String(signalId || "").trim();
+    const numeric = value.match(/^AI-(\d+)$/i);
+    return numeric ? "AI-NUMERIC-" + Number(numeric[1]) : value.toUpperCase();
+  }
+
+  function nextSignalId(usedKeys) {
+    let number = 1;
+    while (usedKeys.has("AI-NUMERIC-" + number)) number += 1;
+    const signalId = "AI-" + String(number).padStart(3, "0");
+    usedKeys.add(signalIdKey(signalId));
+    return signalId;
+  }
+
+  function collisionSafeSignal(signal, usedKeys) {
+    const requested = String(signal && signal.signalId || "").trim();
+    const automatic = !requested || /^AI-(?:NEW|AUTO)(?:-\d+)?$/i.test(requested);
+    const signalId = automatic || usedKeys.has(signalIdKey(requested))
+      ? nextSignalId(usedKeys)
+      : requested;
+    usedKeys.add(signalIdKey(signalId));
+    return Object.assign({}, signal || {}, { signalId: signalId });
+  }
+
+  async function insertSignalsWithoutOverwrite(incoming) {
+    const current = await state.client.from("signals").select("signal_id");
+    if (current.error) throw current.error;
+    const usedKeys = new Set(asArray(current.data).map(function (row) {
+      return signalIdKey(row.signal_id);
+    }));
+    const rows = asArray(incoming).map(function (signal) {
+      return fromSignal(collisionSafeSignal(signal, usedKeys));
+    });
+    if (!rows.length) throw new Error("The JSON batch did not contain any signals.");
+    const result = await state.client.from("signals").insert(rows).select();
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
   function toSignal(row) {
     return {
       signalId: row.signal_id,
+      createdAt: row.created_at,
       date: row.signal_date,
       geography: row.geography,
       pestecClass: row.pestec_class,
@@ -311,10 +351,9 @@
       }
       if (method === "POST" && pathname === "/api/signals/bulk") {
         const incoming = Array.isArray(body) ? body : body.signals;
-        const result = await state.client.from("signals").upsert(asArray(incoming).map(fromSignal), { onConflict: "signal_id" }).select();
-        if (result.error) throw result.error;
+        const inserted = await insertSignalsWithoutOverwrite(incoming);
         await loadSignals();
-        return jsonResponse({ signals: result.data.map(toSignal) }, 201);
+        return jsonResponse({ signals: inserted.map(toSignal) }, 201);
       }
       if (method === "POST" && pathname === "/api/signals/sync") {
         const access = await state.client.rpc("is_editor");
