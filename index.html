@@ -995,6 +995,23 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
     while (used.has(number)) number += 1;
     return 'AI-' + String(number).padStart(3, '0');
   }
+  function previewSignalIdInUse(signalId, signals) {
+    const requested = text(signalId);
+    if (!requested) return false;
+    const requestedNumber = requested.match(/^AI-(\d+)$/i);
+    return (signals || []).some(function (signal) {
+      const existing = text(signal.signalId || signal.signalID || signal.id || signal['Signal ID']);
+      if (existing.toLowerCase() === requested.toLowerCase()) return true;
+      const existingNumber = existing.match(/^AI-(\d+)$/i);
+      return Boolean(requestedNumber && existingNumber && Number(requestedNumber[1]) === Number(existingNumber[1]));
+    });
+  }
+  function previewAssignedSignalId(input, signals) {
+    const requested = text(input && (input.signalId || input.signalID || input.id || input['Signal ID']));
+    return !requested || /^AI-(?:NEW|AUTO)(?:-\d+)?$/i.test(requested) || previewSignalIdInUse(requested, signals)
+      ? lowestAvailableSignalId(signals)
+      : requested;
+  }
   function splitMulti(v) { return text(v).split(/[;,|]/).map(s => s.trim()).filter(Boolean); }
   function countBy(signals, getter) {
     const map = new Map();
@@ -1234,9 +1251,9 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
           const titles = new Set(current.map(s => text(s.title || s.Title).toLowerCase()).filter(Boolean));
           const previewSignals = current.slice();
           const assignedIds = arr.map(function (item) {
-            const signal = normaliseImportedSignal(item, previewSignals);
-            previewSignals.push(signal);
-            return signal.signalId;
+            const assignedId = previewAssignedSignalId(item, previewSignals);
+            previewSignals.push({ signalId: assignedId });
+            return assignedId;
           });
           const reassigned = arr.filter(function (signal, index) {
             const requested = text(signal.signalId || signal.signalID || signal.id || signal['Signal ID']);
@@ -1245,7 +1262,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/alert-
           const missingTitle = arr.filter(s => !text(s.title || s.Title)).length;
           const duplicates = arr.filter(function (signal) {
             const requested = text(signal.signalId || signal.signalID || signal.id || signal['Signal ID']);
-            return signalIdInUse(requested, current) || titles.has(text(signal.title || signal.Title).toLowerCase());
+            return previewSignalIdInUse(requested, current) || titles.has(text(signal.title || signal.Title).toLowerCase());
           }).length;
           const domains = countBy(arr, s => s.aiDomain || s['AI domain']).slice(0,5).map(([k,v]) => `${k}: ${v}`).join('\n');
           result.style.display = 'block';
