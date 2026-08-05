@@ -355,7 +355,11 @@
       panel.id = "signal-radar-collaboration-panel";
       panel.className = "foresight-panel sr-collab-panel";
       panel.setAttribute("aria-label", "Workshop group results");
-      assessmentPanel.insertAdjacentElement("beforebegin", panel);
+      assessmentPanel.insertAdjacentElement("afterend", panel);
+    } else if (panel.previousElementSibling !== assessmentPanel) {
+      // Keep the individual assessment workspace first so participants can
+      // move efficiently from one signal to the next during a workshop.
+      assessmentPanel.insertAdjacentElement("afterend", panel);
     }
 
     let banner = panel.querySelector(".sr-collab-banner");

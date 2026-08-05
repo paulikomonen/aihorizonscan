@@ -242,18 +242,13 @@
   }
 
   function nextSignalId() {
-    const used = new Set(readSignals().map(function (signal) { return text(signal.signalId); }));
-    const highest = Array.from(used).reduce(function (current, signalId) {
-      const match = signalId.match(/^AI-(\d+)$/i);
-      return match ? Math.max(current, Number(match[1]) || 0) : current;
-    }, 0);
-    let number = highest + 1;
-    let candidate = "";
-    do {
-      candidate = "AI-" + String(number).padStart(3, "0");
-      number += 1;
-    } while (used.has(candidate));
-    return candidate;
+    const used = new Set(readSignals().map(function (signal) {
+      const match = text(signal.signalId).match(/^AI-(\d+)$/i);
+      return match ? Number(match[1]) : null;
+    }).filter(function (number) { return Number.isInteger(number) && number > 0; }));
+    let number = 1;
+    while (used.has(number)) number += 1;
+    return "AI-" + String(number).padStart(3, "0");
   }
 
   function newSignalTemplate() {
