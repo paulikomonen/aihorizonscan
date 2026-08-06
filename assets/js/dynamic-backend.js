@@ -444,7 +444,7 @@
         const signalId = decodeURIComponent(match[1]);
         const access = await state.client.rpc("is_editor");
         if (access.error) throw access.error;
-        if (access.data !== true) throw new Error("Editor authentication is required to delete signals.");
+        if (access.data !== true) throw new Error("Editor authentication is required to archive signals.");
         const result = await state.client
           .from("signals")
           .update({ is_archived: true, updated_at: new Date().toISOString() })
