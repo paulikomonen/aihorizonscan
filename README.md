@@ -36,7 +36,7 @@ JSON imports preserve `signalId` (including the legacy `Signal ID`, `Signal Id`,
 
 ## Editorial positioning
 
-The radar is positioned as a weekly updated foresight intelligence tool. Signals are hand-picked through hybrid scanning: AI-augmented signal detection, qualitative interpretation, structured source monitoring, quantitative patterning, foresight expert evaluation and manual curation.
+The radar is positioned as a regularly updated foresight intelligence tool, with a typical update cycle of one to two weeks. Signals are hand-picked through hybrid scanning: AI-augmented signal detection, qualitative interpretation, structured source monitoring, quantitative patterning, foresight expert evaluation and manual curation.
 
 ## Notes
 
@@ -52,7 +52,7 @@ When Supabase is not configured, JSON import writes to the local browser signal 
 
 ## Signals list sorting
 
-The Signals tab displays signals from newest to oldest by default, based on the `date` field in `signals.json`.
+The Signals tab displays signals from newest to oldest by default, based on the database-added timestamp (`createdAt`). Static fallback records use the signal `date` when no added timestamp is available.
 
 
 ## Data refresh behaviour
@@ -70,7 +70,7 @@ The embedded 100-signal database remains as an offline fallback for double-click
 
 ## Editing access
 
-Without Supabase configuration, the **Update tracker** tab and the **Delete signal** function retain the legacy project-password gate:
+Without Supabase configuration, the **Update tracker** tab and the **Archive signal** function retain the legacy project-password gate:
 
 ```text
 aiscan
