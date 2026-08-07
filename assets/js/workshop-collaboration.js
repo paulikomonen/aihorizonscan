@@ -512,18 +512,6 @@
         <div class="foresight-card"><div class="foresight-kicker">Group priorities</div><div class="foresight-stat" style="font-size:24px;">${priorities.length}</div><div class="foresight-body">high-impact signals leaning Prepare or Act</div></div>
         <div class="foresight-card"><div class="foresight-kicker">Scenario drivers</div><div class="foresight-stat" style="font-size:24px;">${scenarioDrivers.length}</div><div class="foresight-body">high mean impact and uncertainty</div></div>
       </div>
-      <div class="sr-collab-export">
-        <div>
-          <div class="sr-mvp-label">Export workshop results</div>
-          <div class="sr-collab-notes-help">Download the current anonymous aggregate, scenario drivers, priorities and strategic notes.</div>
-        </div>
-        <div class="sr-collab-export-actions" aria-label="Workshop result export formats">
-          <button type="button" data-collab-export="xlsx" ${rows.length ? "" : "disabled"}>Excel</button>
-          <button type="button" data-collab-export="csv" ${rows.length ? "" : "disabled"}>CSV</button>
-          <button type="button" data-collab-export="pdf" ${rows.length ? "" : "disabled"}>PDF</button>
-        </div>
-        <div class="sr-collab-export-status${exportStatus.isError ? " is-error" : ""}" aria-live="polite">${esc(exportStatus.message)}</div>
-      </div>
       <div class="sr-collab-driver-key"><span aria-hidden="true"></span>Violet rings mark scenario drivers: mean impact and uncertainty are both at least 2.5 on the 1–3 scale.</div>
       <div class="sr-collab-summary-columns">
         <div>
@@ -537,6 +525,18 @@
         </div>
       </div>
       ${sharedNotesHtml(rows, titles)}
+      <div class="sr-collab-export">
+        <div class="sr-collab-export-copy">
+          <div class="sr-mvp-label">Editor export</div>
+          <div class="sr-collab-notes-help">Save the current anonymous workshop snapshot.</div>
+        </div>
+        <div class="sr-collab-export-actions" aria-label="Workshop result export formats">
+          <button type="button" data-collab-export="xlsx" ${rows.length ? "" : "disabled"}>Excel</button>
+          <button type="button" data-collab-export="csv" ${rows.length ? "" : "disabled"}>CSV</button>
+          <button type="button" data-collab-export="pdf" ${rows.length ? "" : "disabled"}>PDF</button>
+        </div>
+        <div class="sr-collab-export-status${exportStatus.isError ? " is-error" : ""}" aria-live="polite">${esc(exportStatus.message)}</div>
+      </div>
     `;
   }
 
@@ -560,12 +560,13 @@
       [data-testid^="radar-dot-"].sr-collab-scenario-driver .sr-collab-group-ring{stroke:#7c3aed;stroke-width:4;stroke-dasharray:none;opacity:1}
       .sr-collab-driver-key{display:flex;align-items:center;gap:8px;margin-top:13px;font-size:11px;line-height:1.45;color:rgba(24,0,97,.68)}
       .sr-collab-driver-key span{width:11px;height:11px;flex:0 0 11px;border:3px solid #7c3aed;border-radius:50%;box-shadow:0 0 0 2px rgba(124,58,237,.11)}
-      .sr-collab-export{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;align-items:center;margin-top:14px;padding:12px;border:1px solid rgba(24,0,97,.11);border-radius:12px;background:rgba(255,255,255,.72)}
-      .sr-collab-export-actions{display:flex;flex-wrap:wrap;gap:7px;justify-content:flex-end}
-      .sr-collab-export-actions button{min-width:62px;padding:7px 10px;border:1px solid rgba(24,0,97,.22);border-radius:8px;background:#fff;color:#180061;font:inherit;font-size:11px;font-weight:750;cursor:pointer}
-      .sr-collab-export-actions button:hover,.sr-collab-export-actions button:focus-visible{border-color:#7c3aed;color:#6d28d9;outline:none;box-shadow:0 0 0 3px rgba(124,58,237,.11)}
+      .sr-collab-export{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-top:16px;padding-top:12px;border-top:1px solid rgba(24,0,97,.1)}
+      .sr-collab-export-copy{margin-right:auto}
+      .sr-collab-export-actions{display:flex;flex-wrap:wrap;gap:6px}
+      .sr-collab-export-actions button{padding:5px 9px;border:1px solid rgba(24,0,97,.18);border-radius:7px;background:transparent;color:rgba(24,0,97,.72);font:inherit;font-size:10px;font-weight:750;cursor:pointer}
+      .sr-collab-export-actions button:hover,.sr-collab-export-actions button:focus-visible{border-color:#7c3aed;color:#6d28d9;outline:none;box-shadow:0 0 0 2px rgba(124,58,237,.1)}
       .sr-collab-export-actions button:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
-      .sr-collab-export-status{grid-column:1/-1;min-height:15px;font-size:10px;color:#237a4d}.sr-collab-export-status.is-error{color:#b42318}
+      .sr-collab-export-status{flex-basis:100%;min-height:14px;font-size:10px;color:#237a4d}.sr-collab-export-status.is-error{color:#b42318}
       .sr-collab-summary-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:14px}
       .sr-collab-driver-list li:before{color:#7c3aed}
       .sr-collab-driver-scores{display:block;margin-top:2px;font-size:10px;color:rgba(24,0,97,.58)}
@@ -589,8 +590,8 @@
       .sr-collab-note-group .sr-collab-note-list{margin:0;padding:0 11px 11px}
       .sr-collab-note-list li{padding:8px 10px;border-left:3px solid #2a9d62;border-radius:0 8px 8px 0;background:rgba(42,157,98,.055);font-size:12px;line-height:1.48;color:rgba(24,0,97,.78)}
       .sr-collab-note-author{display:block;margin-bottom:2px;font-size:9px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;color:rgba(24,0,97,.48)}
-      .dark .sr-collab-banner,.dark .sr-collab-snapshot,.dark .sr-collab-group,.dark .sr-collab-metrics div,.dark .sr-collab-note-group,.dark .sr-collab-driver-meta span,.dark .sr-collab-export,.dark .sr-collab-export-actions button{background:hsl(var(--card)/.88);border-color:hsl(var(--border));color:hsl(var(--foreground))}.dark .sr-collab-metrics strong,.dark .sr-collab-driver-detail-heading{color:hsl(var(--foreground))}.dark .sr-collab-metrics span,.dark .sr-collab-distribution,.dark .sr-collab-empty,.dark .sr-collab-driver-key,.dark .sr-collab-driver-scores,.dark .sr-collab-notes-help,.dark .sr-collab-note-group summary,.dark .sr-collab-note-group summary small,.dark .sr-collab-note-list li,.dark .sr-collab-driver-detail p,.dark .sr-collab-driver-meta span{color:hsl(var(--muted-foreground))}.dark .sr-collab-note-list li,.dark .sr-collab-driver-detail{background:hsl(var(--muted)/.3)}
-      @media(max-width:700px){.sr-collab-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.sr-collab-summary-columns{grid-template-columns:1fr}.sr-collab-export{grid-template-columns:1fr}.sr-collab-export-actions{justify-content:flex-start}}
+      .dark .sr-collab-banner,.dark .sr-collab-snapshot,.dark .sr-collab-group,.dark .sr-collab-metrics div,.dark .sr-collab-note-group,.dark .sr-collab-driver-meta span{background:hsl(var(--card)/.88);border-color:hsl(var(--border));color:hsl(var(--foreground))}.dark .sr-collab-export,.dark .sr-collab-export-actions button{border-color:hsl(var(--border));color:hsl(var(--foreground))}.dark .sr-collab-metrics strong,.dark .sr-collab-driver-detail-heading{color:hsl(var(--foreground))}.dark .sr-collab-metrics span,.dark .sr-collab-distribution,.dark .sr-collab-empty,.dark .sr-collab-driver-key,.dark .sr-collab-driver-scores,.dark .sr-collab-notes-help,.dark .sr-collab-note-group summary,.dark .sr-collab-note-group summary small,.dark .sr-collab-note-list li,.dark .sr-collab-driver-detail p,.dark .sr-collab-driver-meta span{color:hsl(var(--muted-foreground))}.dark .sr-collab-note-list li,.dark .sr-collab-driver-detail{background:hsl(var(--muted)/.3)}
+      @media(max-width:700px){.sr-collab-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.sr-collab-summary-columns{grid-template-columns:1fr}.sr-collab-export{align-items:flex-start;flex-direction:column}.sr-collab-export-status{width:100%}}
     `;
     document.head.appendChild(style);
   }
@@ -759,13 +760,16 @@
     startPolling();
   }
 
+  // Handle exports during capture so clicks remain reliable inside the
+  // React-rendered Radar tree, even when another UI handler stops bubbling.
   document.addEventListener("click", function (event) {
     const exportButton = event.target.closest && event.target.closest("[data-collab-export]");
-    if (exportButton) {
-      event.preventDefault();
-      if (!exportButton.disabled) handleWorkshopExport(exportButton.getAttribute("data-collab-export") || "");
-      return;
-    }
+    if (!exportButton) return;
+    event.preventDefault();
+    if (!exportButton.disabled) handleWorkshopExport(exportButton.getAttribute("data-collab-export") || "");
+  }, true);
+
+  document.addEventListener("click", function (event) {
     const driverButton = event.target.closest && event.target.closest("[data-collab-driver]");
     if (driverButton) {
       event.preventDefault();
