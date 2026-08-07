@@ -11,6 +11,8 @@
   let checkingAccess = false;
   let editorAllowed = null;
   let renderTimer = null;
+  let accessRetryTimer = null;
+  let accessRetryCount = 0;
 
   function esc(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (char) {
@@ -54,10 +56,18 @@
   }
 
   function findUpdateContainer() {
+    const workflowPanel = document.getElementById("update-workflow-panel");
+    if (workflowPanel) {
+      const workflowContainer = workflowPanel.closest(".space-y-6") || workflowPanel.closest("main");
+      if (workflowContainer) return workflowContainer;
+    }
     const heading = Array.from(document.querySelectorAll("h1")).find(function (item) {
-      return String(item.textContent || "").trim() === "Update tracker";
+      const title = String(item.textContent || "").trim();
+      return title === "Editor workspace" || title === "Update tracker";
     });
-    return heading && (heading.closest(".space-y-6") || heading.closest("main") || heading.parentElement);
+    if (heading) return heading.closest(".space-y-6") || heading.closest("main") || heading.parentElement;
+    const importCard = document.querySelector('[data-testid="card-import"], [data-testid="input-import-json"]');
+    return importCard && (importCard.closest(".space-y-6") || importCard.closest("main") || importCard.parentElement);
   }
 
   function renderPanel() {
@@ -140,7 +150,7 @@
   }
 
   async function initialisePanel() {
-    if (!onUpdatePage() || checkingAccess || editorAllowed === false) return;
+    if (!onUpdatePage() || checkingAccess) return;
     if (editorAllowed === true) {
       renderPanel();
       return;
@@ -148,10 +158,25 @@
     checkingAccess = true;
     try {
       editorAllowed = await hasEditorAccess();
-      if (editorAllowed) renderPanel();
+      if (editorAllowed) {
+        accessRetryCount = 0;
+        renderPanel();
+      } else if (accessRetryCount < 4) {
+        accessRetryCount += 1;
+        clearTimeout(accessRetryTimer);
+        accessRetryTimer = setTimeout(function () {
+          editorAllowed = null;
+          schedule();
+        }, 1500);
+      }
     } catch (error) {
-      editorAllowed = false;
+      editorAllowed = null;
       console.error("Could not verify assessment administration access", error);
+      if (accessRetryCount < 4) {
+        accessRetryCount += 1;
+        clearTimeout(accessRetryTimer);
+        accessRetryTimer = setTimeout(schedule, 1500);
+      }
     } finally {
       checkingAccess = false;
     }
@@ -164,8 +189,16 @@
 
   window.addEventListener("hashchange", function () {
     editorAllowed = null;
+    accessRetryCount = 0;
     schedule();
   });
+  if (backend && backend.client && backend.client.auth && backend.client.auth.onAuthStateChange) {
+    backend.client.auth.onAuthStateChange(function () {
+      editorAllowed = null;
+      accessRetryCount = 0;
+      schedule();
+    });
+  }
   new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", schedule); else schedule();
 })();
