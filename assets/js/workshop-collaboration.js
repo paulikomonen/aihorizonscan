@@ -19,6 +19,7 @@
   let lastRefreshAt = null;
   let refreshing = false;
   let openDriverId = "";
+  let exportStatus = { message: "", isError: false };
 
   function esc(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (char) {
@@ -142,6 +143,275 @@
     ].sort(function (a, b) { return b[1] - a[1]; })[0][0];
   }
 
+  function isGroupPriority(item) {
+    const forwardVotes = Number(item.prepare_count || 0) + Number(item.act_count || 0);
+    return Number(item.avg_impact || 0) >= 2.5
+      && (forwardVotes > Number(item.watch_count || 0) || Number(item.important_count || 0) > 0);
+  }
+
+  function isScenarioDriver(item) {
+    return Number(item.avg_impact || 0) >= 2.5 && Number(item.avg_uncertainty || 0) >= 2.5;
+  }
+
+  function workshopSnapshot() {
+    const rows = Array.from(aggregates.values()).filter(function (item) {
+      return Number(item.rating_count) > 0;
+    }).map(function (item) {
+      const signalId = String(item.signal_id || "");
+      const signal = findSignal(signalId) || {};
+      return {
+        signalId: signalId,
+        title: signalValue(signal, ["title", "Title"], signalId),
+        description: signalValue(signal, ["description", "Description"], ""),
+        pestecClass: signalValue(signal, ["pestecClass", "PESTEC class"], "Unspecified"),
+        responseStage: signalValue(signal, ["responseStage", "Organisational response stage"], "Unspecified"),
+        direction: signalValue(signal, ["direction", "Direction"], "Mixed"),
+        source: signalValue(signal, ["source", "Source"], ""),
+        ratingCount: Number(item.rating_count || 0),
+        avgImpact: Number(item.avg_impact || 0),
+        avgUncertainty: Number(item.avg_uncertainty || 0),
+        commonResponse: modalResponse(item),
+        watchCount: Number(item.watch_count || 0),
+        prepareCount: Number(item.prepare_count || 0),
+        actCount: Number(item.act_count || 0),
+        importantCount: Number(item.important_count || 0),
+        scenarioDriver: isScenarioDriver(item),
+        groupPriority: isGroupPriority(item),
+        notes: strategicNotes(item)
+      };
+    }).sort(function (a, b) {
+      return Number(b.scenarioDriver) - Number(a.scenarioDriver)
+        || Number(b.groupPriority) - Number(a.groupPriority)
+        || (b.avgImpact + b.avgUncertainty) - (a.avgImpact + a.avgUncertainty)
+        || a.signalId.localeCompare(b.signalId, undefined, { numeric: true });
+    });
+    const ratingCount = rows.reduce(function (total, row) { return total + row.ratingCount; }, 0);
+    const noteCount = rows.reduce(function (total, row) { return total + row.notes.length; }, 0);
+    return {
+      exportedAt: new Date(),
+      workshopTitle: workshop && workshop.title ? String(workshop.title) : workshopSlug,
+      workshopSlug: workshopSlug,
+      workshopStatus: workshop && workshop.status ? String(workshop.status) : (enabled ? "Unavailable" : "Local prototype"),
+      rows: rows,
+      totals: {
+        signalCount: rows.length,
+        ratingCount: ratingCount,
+        priorityCount: rows.filter(function (row) { return row.groupPriority; }).length,
+        scenarioDriverCount: rows.filter(function (row) { return row.scenarioDriver; }).length,
+        noteCount: noteCount
+      }
+    };
+  }
+
+  const exportHeaders = [
+    "Signal ID", "Title", "PESTEC", "Signal response stage", "Direction", "Ratings",
+    "Mean impact", "Mean uncertainty", "Common workshop response", "Watch votes",
+    "Prepare votes", "Act votes", "Important votes", "Scenario driver", "Group priority",
+    "Strategic notes", "Description", "Source"
+  ];
+
+  function exportRow(row) {
+    return [
+      row.signalId, row.title, row.pestecClass, row.responseStage, row.direction, row.ratingCount,
+      row.avgImpact, row.avgUncertainty, row.commonResponse, row.watchCount, row.prepareCount,
+      row.actCount, row.importantCount, row.scenarioDriver ? "Yes" : "No",
+      row.groupPriority ? "Yes" : "No", row.notes.join(" | "), row.description, row.source
+    ];
+  }
+
+  function filenameBase(snapshot) {
+    const date = snapshot.exportedAt.toISOString().slice(0, 10);
+    const slug = String(snapshot.workshopSlug || "workshop").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "workshop";
+    return "AI-Horizon-Radar-workshop-" + slug + "-" + date;
+  }
+
+  function csvCell(value) {
+    return '"' + String(value == null ? "" : value).replace(/"/g, '""') + '"';
+  }
+
+  function snapshotCsv(snapshot) {
+    return [exportHeaders].concat(snapshot.rows.map(exportRow)).map(function (row) {
+      return row.map(csvCell).join(",");
+    }).join("\r\n");
+  }
+
+  function downloadBlob(blob, filename) {
+    const link = document.createElement("a");
+    const objectUrl = URL.createObjectURL(blob);
+    link.href = objectUrl;
+    link.download = filename;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 1000);
+  }
+
+  function styleSheetHeader(sheet, rowIndex, lastColumn) {
+    for (let column = 0; column <= lastColumn; column += 1) {
+      const address = window.XLSX.utils.encode_cell({ r: rowIndex, c: column });
+      if (!sheet[address]) continue;
+      sheet[address].s = {
+        fill: { fgColor: { rgb: "180061" } },
+        font: { bold: true, color: { rgb: "FFFFFF" } },
+        alignment: { vertical: "center", wrapText: true }
+      };
+    }
+  }
+
+  function exportExcel(snapshot) {
+    if (!window.XLSX) throw new Error("The Excel export library did not load. Refresh the page and try again.");
+    const summaryRows = [
+      ["AI Horizon Radar - Workshop results snapshot"],
+      [],
+      ["Workshop", snapshot.workshopTitle],
+      ["Workshop slug", snapshot.workshopSlug],
+      ["Workshop status", snapshot.workshopStatus],
+      ["Exported", snapshot.exportedAt.toISOString()],
+      [],
+      ["Snapshot totals", "Count"],
+      ["Group-rated signals", snapshot.totals.signalCount],
+      ["Submitted ratings", snapshot.totals.ratingCount],
+      ["Group priorities", snapshot.totals.priorityCount],
+      ["Scenario drivers", snapshot.totals.scenarioDriverCount],
+      ["Strategic notes", snapshot.totals.noteCount],
+      [],
+      ["Scenario drivers", "Title", "Mean impact", "Mean uncertainty", "Ratings"]
+    ];
+    const driverRows = snapshot.rows.filter(function (row) { return row.scenarioDriver; });
+    if (driverRows.length) driverRows.forEach(function (row) {
+      summaryRows.push([row.signalId, row.title, row.avgImpact, row.avgUncertainty, row.ratingCount]);
+    });
+    else summaryRows.push(["None at export time"]);
+    summaryRows.push([]);
+    const priorityHeaderRow = summaryRows.length;
+    summaryRows.push(["Group priorities", "Title", "Mean impact", "Workshop response", "Ratings"]);
+    const priorityRows = snapshot.rows.filter(function (row) { return row.groupPriority; });
+    if (priorityRows.length) priorityRows.forEach(function (row) {
+      summaryRows.push([row.signalId, row.title, row.avgImpact, row.commonResponse, row.ratingCount]);
+    });
+    else summaryRows.push(["None at export time"]);
+
+    const workbook = window.XLSX.utils.book_new();
+    const summarySheet = window.XLSX.utils.aoa_to_sheet(summaryRows);
+    summarySheet["!cols"] = [{ wch: 24 }, { wch: 44 }, { wch: 16 }, { wch: 20 }, { wch: 12 }];
+    summarySheet["!freeze"] = { xSplit: 0, ySplit: 1 };
+    summarySheet["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
+    summarySheet.A1.s = { font: { bold: true, sz: 16, color: { rgb: "180061" } } };
+    [7, 14, priorityHeaderRow].forEach(function (rowIndex) { styleSheetHeader(summarySheet, rowIndex, 4); });
+    window.XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
+
+    const resultsSheet = window.XLSX.utils.aoa_to_sheet([exportHeaders].concat(snapshot.rows.map(exportRow)));
+    resultsSheet["!cols"] = [
+      { wch: 12 }, { wch: 34 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 10 },
+      { wch: 13 }, { wch: 16 }, { wch: 24 }, { wch: 12 }, { wch: 13 }, { wch: 10 },
+      { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 48 }, { wch: 60 }, { wch: 42 }
+    ];
+    resultsSheet["!autofilter"] = { ref: "A1:R" + Math.max(1, snapshot.rows.length + 1) };
+    resultsSheet["!freeze"] = { xSplit: 0, ySplit: 1 };
+    styleSheetHeader(resultsSheet, 0, exportHeaders.length - 1);
+    snapshot.rows.forEach(function (_row, index) {
+      [6, 7].forEach(function (column) {
+        const cell = resultsSheet[window.XLSX.utils.encode_cell({ r: index + 1, c: column })];
+        if (cell) cell.z = "0.0";
+      });
+    });
+    window.XLSX.utils.book_append_sheet(workbook, resultsSheet, "Signal results");
+
+    const noteRows = [["Signal ID", "Title", "Note number", "Strategic note"]];
+    snapshot.rows.forEach(function (row) {
+      row.notes.forEach(function (note, index) { noteRows.push([row.signalId, row.title, index + 1, note]); });
+    });
+    if (noteRows.length === 1) noteRows.push(["", "", "", "No strategic notes at export time"]);
+    const notesSheet = window.XLSX.utils.aoa_to_sheet(noteRows);
+    notesSheet["!cols"] = [{ wch: 12 }, { wch: 34 }, { wch: 13 }, { wch: 80 }];
+    notesSheet["!autofilter"] = { ref: "A1:D" + noteRows.length };
+    notesSheet["!freeze"] = { xSplit: 0, ySplit: 1 };
+    styleSheetHeader(notesSheet, 0, 3);
+    window.XLSX.utils.book_append_sheet(workbook, notesSheet, "Strategic notes");
+    workbook.Props = {
+      Title: "AI Horizon Radar workshop results - " + snapshot.workshopTitle,
+      Subject: "Aggregated anonymous workshop assessments",
+      Author: "AI Horizon Radar",
+      CreatedDate: snapshot.exportedAt
+    };
+    window.XLSX.writeFile(workbook, filenameBase(snapshot) + ".xlsx", { compression: true });
+  }
+
+  function printList(rows, emptyText) {
+    if (!rows.length) return '<p class="empty">' + esc(emptyText) + "</p>";
+    return "<ol>" + rows.map(function (row) {
+      return "<li><strong>" + esc(row.signalId) + " - " + esc(row.title) + "</strong><span>Impact "
+        + row.avgImpact.toFixed(1) + " · Uncertainty " + row.avgUncertainty.toFixed(1)
+        + " · n=" + row.ratingCount + "</span></li>";
+    }).join("") + "</ol>";
+  }
+
+  function snapshotPrintHtml(snapshot) {
+    const drivers = snapshot.rows.filter(function (row) { return row.scenarioDriver; });
+    const priorities = snapshot.rows.filter(function (row) { return row.groupPriority; });
+    const detailRows = snapshot.rows.map(function (row) {
+      return "<tr><td><strong>" + esc(row.signalId) + "</strong></td><td>" + esc(row.title) + "</td><td>" + row.ratingCount
+        + "</td><td>" + row.avgImpact.toFixed(1) + "</td><td>" + row.avgUncertainty.toFixed(1)
+        + "</td><td>" + esc(row.commonResponse) + "</td><td>" + row.watchCount + " / " + row.prepareCount + " / " + row.actCount
+        + "</td><td>" + (row.scenarioDriver ? "Yes" : "") + "</td><td>" + (row.groupPriority ? "Yes" : "") + "</td></tr>";
+    }).join("");
+    const noteRows = snapshot.rows.filter(function (row) { return row.notes.length; }).map(function (row) {
+      return '<section class="note"><h3>' + esc(row.signalId) + " - " + esc(row.title) + "</h3><ul>"
+        + row.notes.map(function (note) { return "<li>" + esc(note) + "</li>"; }).join("") + "</ul></section>";
+    }).join("");
+    return '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(filenameBase(snapshot)) + '</title><style>'
+      + '@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{margin:0;color:#180061;font:10px/1.4 Arial,sans-serif}h1{margin:0;font-size:22px}h2{margin:22px 0 8px;font-size:14px;border-bottom:2px solid #180061;padding-bottom:4px}h3{margin:0 0 5px;font-size:11px}.meta{margin:4px 0 14px;color:#655c7b}.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}.card{border:1px solid #d8d3e2;border-radius:7px;padding:8px}.card strong{display:block;font-size:18px}.card span{color:#655c7b}.columns{display:grid;grid-template-columns:1fr 1fr;gap:18px}.columns ol{margin:0;padding-left:18px}.columns li{margin:0 0 6px}.columns li span{display:block;color:#655c7b}table{width:100%;border-collapse:collapse;font-size:8px}th{background:#180061;color:#fff;text-align:left}th,td{border:1px solid #d8d3e2;padding:4px;vertical-align:top}tr:nth-child(even) td{background:#f7f5fa}.notes{columns:2;column-gap:18px}.note{break-inside:avoid;border:1px solid #d8d3e2;border-left:3px solid #2a9d62;border-radius:5px;padding:8px;margin:0 0 8px}.note ul{margin:0;padding-left:16px}.empty{color:#655c7b}.footer{margin-top:16px;color:#655c7b;font-size:8px}@media print{.note{break-inside:avoid}thead{display:table-header-group}}</style></head><body>'
+      + '<h1>AI Horizon Radar - Workshop results snapshot</h1><p class="meta"><strong>' + esc(snapshot.workshopTitle) + '</strong> · '
+      + esc(snapshot.workshopSlug) + ' · ' + esc(snapshot.workshopStatus) + ' · Exported ' + esc(snapshot.exportedAt.toLocaleString()) + '</p>'
+      + '<div class="cards"><div class="card"><strong>' + snapshot.totals.signalCount + '</strong><span>group-rated signals</span></div><div class="card"><strong>'
+      + snapshot.totals.ratingCount + '</strong><span>submitted ratings</span></div><div class="card"><strong>' + snapshot.totals.priorityCount
+      + '</strong><span>group priorities</span></div><div class="card"><strong>' + snapshot.totals.scenarioDriverCount + '</strong><span>scenario drivers</span></div><div class="card"><strong>'
+      + snapshot.totals.noteCount + '</strong><span>strategic notes</span></div></div>'
+      + '<div class="columns"><section><h2>Scenario drivers</h2>' + printList(drivers, "No scenario drivers at export time.")
+      + '</section><section><h2>Group priorities</h2>' + printList(priorities, "No group priorities at export time.") + '</section></div>'
+      + '<h2>Aggregated signal assessments</h2><table><thead><tr><th>ID</th><th>Signal</th><th>n</th><th>Impact</th><th>Uncertainty</th><th>Response</th><th>Watch / Prepare / Act</th><th>Driver</th><th>Priority</th></tr></thead><tbody>'
+      + detailRows + '</tbody></table><h2>Shared strategic notes</h2><div class="notes">' + (noteRows || '<p class="empty">No strategic notes at export time.</p>')
+      + '</div><p class="footer">Anonymous aggregated workshop snapshot generated by AI Horizon Radar.</p></body></html>';
+  }
+
+  function setExportStatus(message, isError) {
+    exportStatus = { message: String(message || ""), isError: Boolean(isError) };
+    const status = document.querySelector(".sr-collab-export-status");
+    if (!status) return;
+    status.textContent = message;
+    status.classList.toggle("is-error", Boolean(isError));
+  }
+
+  function handleWorkshopExport(format) {
+    const snapshot = workshopSnapshot();
+    if (!snapshot.rows.length) {
+      setExportStatus("No group-rated signals are available to export yet.", true);
+      return;
+    }
+    try {
+      if (format === "xlsx") {
+        exportExcel(snapshot);
+        setExportStatus("Excel snapshot downloaded.");
+      } else if (format === "csv") {
+        downloadBlob(new Blob(["\ufeff", snapshotCsv(snapshot)], { type: "text/csv;charset=utf-8" }), filenameBase(snapshot) + ".csv");
+        setExportStatus("CSV snapshot downloaded.");
+      } else if (format === "pdf") {
+        const printWindow = window.open("", "_blank");
+        if (!printWindow) throw new Error("The print window was blocked. Allow pop-ups for this site and try again.");
+        printWindow.opener = null;
+        printWindow.document.open();
+        printWindow.document.write(snapshotPrintHtml(snapshot));
+        printWindow.document.close();
+        setExportStatus("Print-ready snapshot opened. Choose Save as PDF in the print dialog.");
+        setTimeout(function () { printWindow.focus(); printWindow.print(); }, 250);
+      }
+    } catch (error) {
+      console.error("Could not export workshop snapshot", error);
+      setExportStatus(error && error.message ? error.message : "Workshop export failed.", true);
+    }
+  }
+
   function aggregateHtml(item) {
     if (!item || !Number(item.rating_count)) {
       return '<div class="sr-collab-empty">No group ratings for this signal yet.</div>';
@@ -211,13 +481,8 @@
   function groupSummaryHtml() {
     const rows = Array.from(aggregates.values()).filter(function (item) { return Number(item.rating_count) > 0; });
     const ratingCount = rows.reduce(function (total, item) { return total + Number(item.rating_count || 0); }, 0);
-    const priorities = rows.filter(function (item) {
-      const forwardVotes = Number(item.prepare_count || 0) + Number(item.act_count || 0);
-      return Number(item.avg_impact || 0) >= 2.5 && (forwardVotes > Number(item.watch_count || 0) || Number(item.important_count || 0) > 0);
-    });
-    const scenarioDrivers = rows.filter(function (item) {
-      return Number(item.avg_impact || 0) >= 2.5 && Number(item.avg_uncertainty || 0) >= 2.5;
-    });
+    const priorities = rows.filter(isGroupPriority);
+    const scenarioDrivers = rows.filter(isScenarioDriver);
     if (openDriverId && !scenarioDrivers.some(function (item) { return item.signal_id === openDriverId; })) openDriverId = "";
     const titles = signalTitles();
     const priorityList = priorities.slice().sort(function (a, b) {
@@ -246,6 +511,18 @@
         <div class="foresight-card"><div class="foresight-kicker">Group-rated</div><div class="foresight-stat" style="font-size:24px;">${rows.length}</div><div class="foresight-body">signals with ${ratingCount} submitted ratings</div></div>
         <div class="foresight-card"><div class="foresight-kicker">Group priorities</div><div class="foresight-stat" style="font-size:24px;">${priorities.length}</div><div class="foresight-body">high-impact signals leaning Prepare or Act</div></div>
         <div class="foresight-card"><div class="foresight-kicker">Scenario drivers</div><div class="foresight-stat" style="font-size:24px;">${scenarioDrivers.length}</div><div class="foresight-body">high mean impact and uncertainty</div></div>
+      </div>
+      <div class="sr-collab-export">
+        <div>
+          <div class="sr-mvp-label">Export workshop results</div>
+          <div class="sr-collab-notes-help">Download the current anonymous aggregate, scenario drivers, priorities and strategic notes.</div>
+        </div>
+        <div class="sr-collab-export-actions" aria-label="Workshop result export formats">
+          <button type="button" data-collab-export="xlsx" ${rows.length ? "" : "disabled"}>Excel</button>
+          <button type="button" data-collab-export="csv" ${rows.length ? "" : "disabled"}>CSV</button>
+          <button type="button" data-collab-export="pdf" ${rows.length ? "" : "disabled"}>PDF</button>
+        </div>
+        <div class="sr-collab-export-status${exportStatus.isError ? " is-error" : ""}" aria-live="polite">${esc(exportStatus.message)}</div>
       </div>
       <div class="sr-collab-driver-key"><span aria-hidden="true"></span>Violet rings mark scenario drivers: mean impact and uncertainty are both at least 2.5 on the 1–3 scale.</div>
       <div class="sr-collab-summary-columns">
@@ -283,6 +560,12 @@
       [data-testid^="radar-dot-"].sr-collab-scenario-driver .sr-collab-group-ring{stroke:#7c3aed;stroke-width:4;stroke-dasharray:none;opacity:1}
       .sr-collab-driver-key{display:flex;align-items:center;gap:8px;margin-top:13px;font-size:11px;line-height:1.45;color:rgba(24,0,97,.68)}
       .sr-collab-driver-key span{width:11px;height:11px;flex:0 0 11px;border:3px solid #7c3aed;border-radius:50%;box-shadow:0 0 0 2px rgba(124,58,237,.11)}
+      .sr-collab-export{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;align-items:center;margin-top:14px;padding:12px;border:1px solid rgba(24,0,97,.11);border-radius:12px;background:rgba(255,255,255,.72)}
+      .sr-collab-export-actions{display:flex;flex-wrap:wrap;gap:7px;justify-content:flex-end}
+      .sr-collab-export-actions button{min-width:62px;padding:7px 10px;border:1px solid rgba(24,0,97,.22);border-radius:8px;background:#fff;color:#180061;font:inherit;font-size:11px;font-weight:750;cursor:pointer}
+      .sr-collab-export-actions button:hover,.sr-collab-export-actions button:focus-visible{border-color:#7c3aed;color:#6d28d9;outline:none;box-shadow:0 0 0 3px rgba(124,58,237,.11)}
+      .sr-collab-export-actions button:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+      .sr-collab-export-status{grid-column:1/-1;min-height:15px;font-size:10px;color:#237a4d}.sr-collab-export-status.is-error{color:#b42318}
       .sr-collab-summary-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:14px}
       .sr-collab-driver-list li:before{color:#7c3aed}
       .sr-collab-driver-scores{display:block;margin-top:2px;font-size:10px;color:rgba(24,0,97,.58)}
@@ -306,8 +589,8 @@
       .sr-collab-note-group .sr-collab-note-list{margin:0;padding:0 11px 11px}
       .sr-collab-note-list li{padding:8px 10px;border-left:3px solid #2a9d62;border-radius:0 8px 8px 0;background:rgba(42,157,98,.055);font-size:12px;line-height:1.48;color:rgba(24,0,97,.78)}
       .sr-collab-note-author{display:block;margin-bottom:2px;font-size:9px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;color:rgba(24,0,97,.48)}
-      .dark .sr-collab-banner,.dark .sr-collab-snapshot,.dark .sr-collab-group,.dark .sr-collab-metrics div,.dark .sr-collab-note-group,.dark .sr-collab-driver-meta span{background:hsl(var(--card)/.88);border-color:hsl(var(--border));color:hsl(var(--foreground))}.dark .sr-collab-metrics strong,.dark .sr-collab-driver-detail-heading{color:hsl(var(--foreground))}.dark .sr-collab-metrics span,.dark .sr-collab-distribution,.dark .sr-collab-empty,.dark .sr-collab-driver-key,.dark .sr-collab-driver-scores,.dark .sr-collab-notes-help,.dark .sr-collab-note-group summary,.dark .sr-collab-note-group summary small,.dark .sr-collab-note-list li,.dark .sr-collab-driver-detail p,.dark .sr-collab-driver-meta span{color:hsl(var(--muted-foreground))}.dark .sr-collab-note-list li,.dark .sr-collab-driver-detail{background:hsl(var(--muted)/.3)}
-      @media(max-width:700px){.sr-collab-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.sr-collab-summary-columns{grid-template-columns:1fr}}
+      .dark .sr-collab-banner,.dark .sr-collab-snapshot,.dark .sr-collab-group,.dark .sr-collab-metrics div,.dark .sr-collab-note-group,.dark .sr-collab-driver-meta span,.dark .sr-collab-export,.dark .sr-collab-export-actions button{background:hsl(var(--card)/.88);border-color:hsl(var(--border));color:hsl(var(--foreground))}.dark .sr-collab-metrics strong,.dark .sr-collab-driver-detail-heading{color:hsl(var(--foreground))}.dark .sr-collab-metrics span,.dark .sr-collab-distribution,.dark .sr-collab-empty,.dark .sr-collab-driver-key,.dark .sr-collab-driver-scores,.dark .sr-collab-notes-help,.dark .sr-collab-note-group summary,.dark .sr-collab-note-group summary small,.dark .sr-collab-note-list li,.dark .sr-collab-driver-detail p,.dark .sr-collab-driver-meta span{color:hsl(var(--muted-foreground))}.dark .sr-collab-note-list li,.dark .sr-collab-driver-detail{background:hsl(var(--muted)/.3)}
+      @media(max-width:700px){.sr-collab-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.sr-collab-summary-columns{grid-template-columns:1fr}.sr-collab-export{grid-template-columns:1fr}.sr-collab-export-actions{justify-content:flex-start}}
     `;
     document.head.appendChild(style);
   }
@@ -317,13 +600,9 @@
       const id = dot.getAttribute("data-testid").replace(/^radar-dot-/, "");
       const item = aggregates.get(id);
       const hasGroupRating = Boolean(item && Number(item.rating_count));
-      const isScenarioDriver = Boolean(
-        hasGroupRating
-        && Number(item.avg_impact || 0) >= 2.5
-        && Number(item.avg_uncertainty || 0) >= 2.5
-      );
+      const scenarioDriver = Boolean(hasGroupRating && isScenarioDriver(item));
       dot.classList.toggle("sr-collab-group-rated", hasGroupRating);
-      dot.classList.toggle("sr-collab-scenario-driver", isScenarioDriver);
+      dot.classList.toggle("sr-collab-scenario-driver", scenarioDriver);
       let ring = dot.querySelector(".sr-collab-group-ring");
       if (!hasGroupRating) {
         if (ring) ring.remove();
@@ -481,6 +760,12 @@
   }
 
   document.addEventListener("click", function (event) {
+    const exportButton = event.target.closest && event.target.closest("[data-collab-export]");
+    if (exportButton) {
+      event.preventDefault();
+      if (!exportButton.disabled) handleWorkshopExport(exportButton.getAttribute("data-collab-export") || "");
+      return;
+    }
     const driverButton = event.target.closest && event.target.closest("[data-collab-driver]");
     if (driverButton) {
       event.preventDefault();
@@ -502,6 +787,11 @@
     scheduleRender();
     if (onRadarPage()) refreshAggregates();
   });
+  window.AIHorizonWorkshopExports = {
+    getSnapshot: workshopSnapshot,
+    createCsv: snapshotCsv,
+    createPrintHtml: snapshotPrintHtml
+  };
   new MutationObserver(function () { if (onRadarPage()) scheduleRender(); }).observe(document.documentElement, { childList: true, subtree: true });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialise); else initialise();
 })();
