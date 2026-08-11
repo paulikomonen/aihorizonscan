@@ -19,6 +19,8 @@
   let lastRefreshAt = null;
   let refreshing = false;
   let openDriverId = "";
+  let csvObjectUrl = "";
+  let csvObjectContent = "";
 
   function esc(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (char) {
@@ -235,7 +237,12 @@
   }
 
   function csvDownloadHref(snapshot) {
-    return "data:text/csv;charset=utf-8," + encodeURIComponent("\ufeff" + snapshotCsv(snapshot));
+    const content = "\ufeff" + snapshotCsv(snapshot);
+    if (csvObjectUrl && csvObjectContent === content) return csvObjectUrl;
+    if (csvObjectUrl) window.URL.revokeObjectURL(csvObjectUrl);
+    csvObjectContent = content;
+    csvObjectUrl = window.URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
+    return csvObjectUrl;
   }
 
   function aggregateHtml(item) {
@@ -608,6 +615,9 @@
   window.addEventListener("hashchange", function () {
     scheduleRender();
     if (onRadarPage()) refreshAggregates();
+  });
+  window.addEventListener("beforeunload", function () {
+    if (csvObjectUrl) window.URL.revokeObjectURL(csvObjectUrl);
   });
   window.AIHorizonWorkshopExports = {
     getSnapshot: workshopSnapshot,
