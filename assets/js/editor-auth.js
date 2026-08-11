@@ -39,25 +39,34 @@
 
   function renderEditorStatus(session) {
     if (!onUpdatePage() || !session || document.getElementById("aih-editor-session")) return;
-    const heading = Array.from(document.querySelectorAll("h1")).find(function (item) {
-      return String(item.textContent || "").trim() === "Update tracker";
+    const heading = Array.from(document.querySelectorAll("h1, h2")).find(function (item) {
+      const title = String(item.textContent || "").trim().toLowerCase();
+      return title === "editor workspace" || title === "update tracker";
     });
     if (!heading) return;
     const header = heading.closest("header") || heading.parentElement;
     const bar = document.createElement("div");
     bar.id = "aih-editor-session";
     bar.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;padding:8px 10px;border:1px solid hsl(var(--border));border-radius:10px;background:hsl(var(--card));font-size:12px;color:hsl(var(--muted-foreground))";
-    bar.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#2a9d62;box-shadow:0 0 0 4px rgba(42,157,98,.12)"></span><span>Editor signed in as <strong style="color:hsl(var(--foreground))"></strong></span><button type="button" id="aih-editor-signout" style="margin-left:auto;border:1px solid hsl(var(--border));border-radius:8px;padding:5px 8px;background:hsl(var(--background));color:hsl(var(--foreground));font-weight:650;cursor:pointer">Sign out</button>';
+    bar.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:#2a9d62;box-shadow:0 0 0 4px rgba(42,157,98,.12)"></span><span>Editor signed in as <strong style="color:hsl(var(--foreground))"></strong></span><button type="button" id="aih-editor-signout" style="margin-left:auto;border:1px solid hsl(var(--border));border-radius:8px;padding:5px 8px;background:hsl(var(--background));color:hsl(var(--foreground));font-weight:650;cursor:pointer">Log out</button>';
     bar.querySelector("strong").textContent = session.user.email || "approved editor";
     header.appendChild(bar);
     bar.querySelector("#aih-editor-signout").addEventListener("click", async function () {
       if (processing) return;
       processing = true;
       this.disabled = true;
-      this.textContent = "Signing out…";
+      this.textContent = "Logging out…";
       clearLocalEditorAccess();
-      try { await client.auth.signOut(); } catch (error) {}
-      window.location.reload();
+      try {
+        const result = await client.auth.signOut();
+        if (result && result.error) throw result.error;
+        window.location.reload();
+      } catch (error) {
+        processing = false;
+        this.disabled = false;
+        this.textContent = "Log out";
+        this.title = error.message || "Log out failed. Please try again.";
+      }
     });
   }
 
@@ -144,7 +153,7 @@
           throw new Error("This account is valid but is not on the editor allow-list.");
         }
         unlockEditor();
-        message.textContent = "Editor access confirmed. Opening the Update tracker…";
+        message.textContent = "Editor access confirmed. Opening the Editor workspace…";
         window.location.reload();
       } catch (error) {
         clearLocalEditorAccess();

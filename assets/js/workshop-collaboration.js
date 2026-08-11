@@ -19,8 +19,6 @@
   let lastRefreshAt = null;
   let refreshing = false;
   let openDriverId = "";
-  let csvObjectUrl = "";
-  let csvObjectContent = "";
 
   function esc(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (char) {
@@ -236,13 +234,27 @@
     }).join("\r\n");
   }
 
-  function csvDownloadHref(snapshot) {
+  function downloadCsv(snapshot) {
+    if (!snapshot || !snapshot.rows || !snapshot.rows.length) throw new Error("No workshop ratings are available to export yet.");
     const content = "\ufeff" + snapshotCsv(snapshot);
-    if (csvObjectUrl && csvObjectContent === content) return csvObjectUrl;
-    if (csvObjectUrl) window.URL.revokeObjectURL(csvObjectUrl);
-    csvObjectContent = content;
-    csvObjectUrl = window.URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
-    return csvObjectUrl;
+    const objectUrl = window.URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    const filename = filenameBase(snapshot) + ".csv";
+    link.href = objectUrl;
+    link.download = filename;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function () { window.URL.revokeObjectURL(objectUrl); }, 1500);
+    return { filename: filename, rowCount: snapshot.rows.length, byteCount: new Blob([content]).size };
+  }
+
+  function setExportStatus(message, failed) {
+    const status = document.getElementById("sr-collab-export-status");
+    if (!status) return;
+    status.textContent = message;
+    status.classList.toggle("sr-collab-export-error", Boolean(failed));
   }
 
   function aggregateHtml(item) {
@@ -314,8 +326,6 @@
   function groupSummaryHtml() {
     const rows = Array.from(aggregates.values()).filter(function (item) { return Number(item.rating_count) > 0; });
     const exportSnapshot = workshopSnapshot();
-    const csvHref = exportSnapshot.rows.length ? csvDownloadHref(exportSnapshot) : "";
-    const csvFilename = filenameBase(exportSnapshot) + ".csv";
     const ratingCount = rows.reduce(function (total, item) { return total + Number(item.rating_count || 0); }, 0);
     const priorities = rows.filter(isGroupPriority);
     const scenarioDrivers = rows.filter(isScenarioDriver);
@@ -367,10 +377,11 @@
           <div class="sr-collab-notes-help">Save the current anonymous workshop snapshot as an Excel-compatible CSV table.</div>
         </div>
         <div class="sr-collab-export-actions" aria-label="Workshop result export formats">
-          ${csvHref
-            ? '<a href="' + esc(csvHref) + '" download="' + esc(csvFilename) + '">Download CSV</a>'
+          ${exportSnapshot.rows.length
+            ? '<button type="button" data-collab-export-csv>Download CSV</button>'
             : '<span class="sr-collab-export-disabled">Available after the first group rating</span>'}
         </div>
+        <div id="sr-collab-export-status" class="sr-collab-export-status" aria-live="polite"></div>
       </div>
     `;
   }
@@ -398,9 +409,12 @@
       .sr-collab-export{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-top:16px;padding-top:12px;border-top:1px solid rgba(24,0,97,.1)}
       .sr-collab-export-copy{margin-right:auto}
       .sr-collab-export-actions{display:flex;flex-wrap:wrap;gap:6px}
-      .sr-collab-export-actions a{display:inline-block;padding:5px 9px;border:1px solid rgba(24,0,97,.18);border-radius:7px;background:transparent;color:rgba(24,0,97,.72);font-size:10px;font-weight:750;text-decoration:none}
-      .sr-collab-export-actions a:hover,.sr-collab-export-actions a:focus-visible{border-color:#7c3aed;color:#6d28d9;outline:none;box-shadow:0 0 0 2px rgba(124,58,237,.1)}
+      .sr-collab-export-actions button{display:inline-block;padding:5px 9px;border:1px solid rgba(24,0,97,.18);border-radius:7px;background:transparent;color:rgba(24,0,97,.72);font-size:10px;font-weight:750;text-decoration:none;cursor:pointer}
+      .sr-collab-export-actions button:hover,.sr-collab-export-actions button:focus-visible{border-color:#7c3aed;color:#6d28d9;outline:none;box-shadow:0 0 0 2px rgba(124,58,237,.1)}
       .sr-collab-export-disabled{font-size:10px;color:rgba(24,0,97,.48)}
+      .sr-collab-export-status{flex-basis:100%;min-height:15px;font-size:10px;color:#2a7d52}
+      .sr-collab-export-status:empty{display:none}
+      .sr-collab-export-error{color:#b42318}
       .sr-collab-summary-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:14px}
       .sr-collab-driver-list li:before{color:#7c3aed}
       .sr-collab-driver-scores{display:block;margin-top:2px;font-size:10px;color:rgba(24,0,97,.58)}
@@ -424,7 +438,7 @@
       .sr-collab-note-group .sr-collab-note-list{margin:0;padding:0 11px 11px}
       .sr-collab-note-list li{padding:8px 10px;border-left:3px solid #2a9d62;border-radius:0 8px 8px 0;background:rgba(42,157,98,.055);font-size:12px;line-height:1.48;color:rgba(24,0,97,.78)}
       .sr-collab-note-author{display:block;margin-bottom:2px;font-size:9px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;color:rgba(24,0,97,.48)}
-      .dark .sr-collab-banner,.dark .sr-collab-snapshot,.dark .sr-collab-group,.dark .sr-collab-metrics div,.dark .sr-collab-note-group,.dark .sr-collab-driver-meta span{background:hsl(var(--card)/.88);border-color:hsl(var(--border));color:hsl(var(--foreground))}.dark .sr-collab-export,.dark .sr-collab-export-actions a{border-color:hsl(var(--border));color:hsl(var(--foreground))}.dark .sr-collab-metrics strong,.dark .sr-collab-driver-detail-heading{color:hsl(var(--foreground))}.dark .sr-collab-metrics span,.dark .sr-collab-distribution,.dark .sr-collab-empty,.dark .sr-collab-driver-key,.dark .sr-collab-driver-scores,.dark .sr-collab-notes-help,.dark .sr-collab-note-group summary,.dark .sr-collab-note-group summary small,.dark .sr-collab-note-list li,.dark .sr-collab-driver-detail p,.dark .sr-collab-driver-meta span,.dark .sr-collab-export-disabled{color:hsl(var(--muted-foreground))}.dark .sr-collab-note-list li,.dark .sr-collab-driver-detail{background:hsl(var(--muted)/.3)}
+      .dark .sr-collab-banner,.dark .sr-collab-snapshot,.dark .sr-collab-group,.dark .sr-collab-metrics div,.dark .sr-collab-note-group,.dark .sr-collab-driver-meta span{background:hsl(var(--card)/.88);border-color:hsl(var(--border));color:hsl(var(--foreground))}.dark .sr-collab-export,.dark .sr-collab-export-actions button{border-color:hsl(var(--border));color:hsl(var(--foreground))}.dark .sr-collab-metrics strong,.dark .sr-collab-driver-detail-heading{color:hsl(var(--foreground))}.dark .sr-collab-metrics span,.dark .sr-collab-distribution,.dark .sr-collab-empty,.dark .sr-collab-driver-key,.dark .sr-collab-driver-scores,.dark .sr-collab-notes-help,.dark .sr-collab-note-group summary,.dark .sr-collab-note-group summary small,.dark .sr-collab-note-list li,.dark .sr-collab-driver-detail p,.dark .sr-collab-driver-meta span,.dark .sr-collab-export-disabled{color:hsl(var(--muted-foreground))}.dark .sr-collab-note-list li,.dark .sr-collab-driver-detail{background:hsl(var(--muted)/.3)}
       @media(max-width:700px){.sr-collab-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.sr-collab-summary-columns{grid-template-columns:1fr}.sr-collab-export{align-items:flex-start;flex-direction:column}}
     `;
     document.head.appendChild(style);
@@ -595,6 +609,18 @@
   }
 
   document.addEventListener("click", function (event) {
+    const exportButton = event.target.closest && event.target.closest("[data-collab-export-csv]");
+    if (exportButton) {
+      event.preventDefault();
+      try {
+        const result = downloadCsv(workshopSnapshot());
+        setExportStatus("Downloaded " + result.rowCount + " signals to " + result.filename + ".", false);
+      } catch (error) {
+        console.error("Workshop CSV export failed", error);
+        setExportStatus("Export failed: " + (error.message || "the browser could not create the file"), true);
+      }
+      return;
+    }
     const driverButton = event.target.closest && event.target.closest("[data-collab-driver]");
     if (driverButton) {
       event.preventDefault();
@@ -616,13 +642,10 @@
     scheduleRender();
     if (onRadarPage()) refreshAggregates();
   });
-  window.addEventListener("beforeunload", function () {
-    if (csvObjectUrl) window.URL.revokeObjectURL(csvObjectUrl);
-  });
   window.AIHorizonWorkshopExports = {
     getSnapshot: workshopSnapshot,
     createCsv: snapshotCsv,
-    createCsvHref: csvDownloadHref
+    downloadCsv: downloadCsv
   };
   new MutationObserver(function () { if (onRadarPage()) scheduleRender(); }).observe(document.documentElement, { childList: true, subtree: true });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialise); else initialise();
